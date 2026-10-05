@@ -1,0 +1,13 @@
+# Khla Si Ko (Tiger Eats Cow) - Project Dependencies
+#
+# Python requirement:
+# Python 3.11+
+#
+# Package versions are intentionally not pinned because the project
+# requirements document specifies the technologies but does not define
+# exact package versions.
+
+opencv-python
+mediapipe
+pygame
+numpy
