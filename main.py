@@ -1,215 +1,103 @@
-"""
-Khla Si Ko - Main Application
+import cv2
 
-Main controller that connects:
+from camera import Camera
+from hand_tracker import HandTracker
 
-Camera
-Hand Tracker
-Gesture Recognizer
-Game Rules
-Game State
-Renderer
-Audio Manager
-"""
-
-import pygame
-
-from src import config
-
-from src.camera import Camera
-from src.hand_tracker import HandTracker
-from src.gesture_recognizer import GestureRecognizer
-
-from src.game_rules import determine_winner
-from src.game_state import GameState
-
-from src.renderer import Renderer
-from src.audio_manager import AudioManager
-
-
-# ============================================================
-# MAIN
-# ============================================================
 
 def main():
 
-    # --------------------------------------------------------
-    # INITIALIZE PYGAME
-    # --------------------------------------------------------
+    camera = Camera(
+        camera_index=0,
+        width=1280,
+        height=720
+    )
 
-    pygame.init()
+    tracker = HandTracker(
+        max_num_hands=1,
+        detection_confidence=0.5,
+        tracking_confidence=0.5
+    )
 
-    # --------------------------------------------------------
-    # CREATE COMPONENTS
-    # --------------------------------------------------------
+    print("Camera started.")
+    print("Press Q to quit.")
 
-    camera = Camera()
+    try:
 
-    hand_tracker = HandTracker()
+        while camera.is_opened():
 
-    gesture_recognizer = GestureRecognizer()
+            frame = camera.read()
 
-    game_state = GameState()
+            if frame is None:
+                print("Failed to read camera frame.")
+                break
 
-    renderer = Renderer()
+            # Flip image so it behaves like a mirror
+            frame = cv2.flip(frame, 1)
 
-    audio = AudioManager()
+            # Detect hand
+            results = tracker.process(frame)
 
-    # --------------------------------------------------------
-    # MAIN LOOP
-    # --------------------------------------------------------
-
-    while game_state.running:
-
-        # ====================================================
-        # 1. HANDLE EVENTS
-        # ====================================================
-
-        for event in pygame.event.get():
-
-            if event.type == pygame.QUIT:
-
-                game_state.running = False
-
-            elif event.type == pygame.KEYDOWN:
-
-                # ESC = exit
-                if event.key == pygame.K_ESCAPE:
-
-                    game_state.running = False
-
-                # R = reset
-                elif event.key == pygame.K_r:
-
-                    game_state.reset_game()
-
-                    audio.play_click()
-
-        # ====================================================
-        # 2. GET CAMERA FRAME
-        # ====================================================
-
-        frame = camera.read()
-
-        if frame is None:
-
-            continue
-
-        # ====================================================
-        # 3. TRACK HAND
-        # ====================================================
-
-        hand_results = hand_tracker.process(
-            frame
-        )
-
-        # ====================================================
-        # 4. RECOGNIZE GESTURE
-        # ====================================================
-
-        player_gesture = gesture_recognizer.recognize(
-            hand_results
-        )
-
-        game_state.player_gesture = player_gesture
-
-        # ====================================================
-        # 5. GAME LOGIC
-        # ====================================================
-
-        # Only process a valid gesture.
-        if (
-            player_gesture != config.GESTURE_NONE
-            and game_state.can_play
-        ):
-
-            # Your game_state / game_rules team code
-            # should control when a round is played.
-
-            computer_gesture = (
-                game_state.generate_computer_gesture()
+            # Draw hand landmarks
+            frame = tracker.draw_hands(
+                frame,
+                results
             )
 
-            game_state.computer_gesture = (
-                computer_gesture
+            # Get pixel coordinates
+            landmarks = tracker.get_pixel_landmarks(
+                frame,
+                results
             )
 
-            # ----------------------------------------------
-            # Determine winner
-            # ----------------------------------------------
+            if landmarks:
 
-            result = determine_winner(
-                player_gesture,
-                computer_gesture
+                # Wrist = landmark 0
+                wrist_x, wrist_y = landmarks[0]
+
+                cv2.circle(
+                    frame,
+                    (wrist_x, wrist_y),
+                    10,
+                    (0, 255, 0),
+                    -1
+                )
+
+                cv2.putText(
+                    frame,
+                    "Hand Detected",
+                    (30, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2
+                )
+
+            else:
+
+                cv2.putText(
+                    frame,
+                    "No Hand Detected",
+                    (30, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 0, 255),
+                    2
+                )
+
+            cv2.imshow(
+                "Khla Si Ko - Hand Tracking",
+                frame
             )
 
-            game_state.result = result
+            # Press Q to quit
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
-            # ----------------------------------------------
-            # Update score
-            # ----------------------------------------------
+    finally:
 
-            game_state.update_score(
-                result
-            )
+        camera.release()
+        tracker.close()
 
-            # ----------------------------------------------
-            # Play sound
-            # ----------------------------------------------
-
-            if result == config.RESULT_PLAYER_WIN:
-
-                audio.play_win()
-
-            elif result == config.RESULT_COMPUTER_WIN:
-
-                audio.play_lose()
-
-            elif result == config.RESULT_DRAW:
-
-                audio.play_draw()
-
-        # ====================================================
-        # 6. RENDER
-        # ====================================================
-
-        renderer.render(
-            player_score=game_state.player_score,
-
-            computer_score=game_state.computer_score,
-
-            gesture=game_state.player_gesture,
-
-            result=game_state.result
-        )
-
-        # ====================================================
-        # 7. FPS
-        # ====================================================
-
-        renderer.tick(
-            config.FPS
-        )
-
-    # ========================================================
-    # CLEAN UP
-    # ========================================================
-
-    camera.release()
-
-    hand_tracker.close()
-
-    audio.close()
-
-    renderer.close()
-
-    pygame.quit()
-
-
-# ============================================================
-# PROGRAM ENTRY
-# ============================================================
 
 if __name__ == "__main__":
-
     main()

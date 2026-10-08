@@ -1,15 +1,49 @@
-class Camera:
-    def __init__(self, position, target, up):
-        self.position = position
-        self.target = target
-        self.up = up
+import cv2
 
-    def get_view_matrix(self):
-        # Calculate the view matrix based on position, target, and up vector
-        # This is a placeholder implementation; actual implementation would involve matrix math
-        return [[1, 0, 0, -self.position[0]],
-                [0, 1, 0, -self.position[1]],
-                [0, 0, 1, -self.position[2]],
-                [0, 0, 0, 1]]
-    def set_position(self, position):
-        self.position = position
+
+class Camera:
+    """
+    Handles webcam initialization, frame capture,
+    display, and cleanup.
+    """
+
+    def __init__(self, camera_index=0, width=1280, height=720):
+        self.camera_index = camera_index
+        self.width = width
+        self.height = height
+
+        self.cap = cv2.VideoCapture(self.camera_index)
+
+        if not self.cap.isOpened():
+            raise RuntimeError(
+                f"Could not open camera with index {self.camera_index}"
+            )
+
+        # Set camera resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+
+    def read(self):
+        """
+        Capture one frame from the camera.
+
+        Returns:
+            frame: OpenCV image or None if capture fails.
+        """
+        success, frame = self.cap.read()
+
+        if not success:
+            return None
+
+        return frame
+
+    def release(self):
+        """Release the camera."""
+        if self.cap.isOpened():
+            self.cap.release()
+
+        cv2.destroyAllWindows()
+
+    def is_opened(self):
+        """Check whether the camera is currently open."""
+        return self.cap.isOpened()
