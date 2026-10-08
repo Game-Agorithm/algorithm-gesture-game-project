@@ -71,14 +71,12 @@ class KhlaSiKoRules:
     def check_winner(cls, board, unplaced_cows, captured_cows):
         if captured_cows >= 4:
             return "TIGERS"
+        if unplaced_cows > 0:
+            return None
 
-        all_tiger_moves = []
         for r in range(cls.BOARD_SIZE):
             for c in range(cls.BOARD_SIZE):
-                if board[r][c] == 'T':
-                    all_tiger_moves.extend(cls.get_valid_tiger_moves(board, (r, c)))
+                if board[r][c] == 'T' and cls.get_valid_tiger_moves(board, (r, c)):
+                    return None
 
-        if len(all_tiger_moves) == 0:
-            return "COWS"
-
-        return None
+        return "COWS"
