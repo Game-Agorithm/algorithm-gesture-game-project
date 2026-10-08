@@ -2,7 +2,6 @@ import math
 class GestureRecognizer:
     def __init__(self, pinch_threshold=0.05):
         self.pinch_threshold = pinch_threshold
-
     def detect_gesture(self, landmarks):
         """
         Analyzes hand landmarks and maps them to a game action.
@@ -18,7 +17,6 @@ class GestureRecognizer:
             return "RELEASE"
 
         return "UNKNOWN"
-
     def _is_fist(self, landmarks):
         """
         Checks if thumb tip (4) and index tip (8) are close together (pinch/fist).

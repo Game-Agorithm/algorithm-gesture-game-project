@@ -43,7 +43,6 @@ class KhlaSiKoRules:
         r, c = tiger_pos
         if not cls.is_valid_position(r, c) or board[r][c] != 'T':
             return []
-
         valid_moves = []
         for nr, nc, dr, dc in cls.get_orthogonal_neighbors(r, c):
             if board[nr][nc] is None:
@@ -53,7 +52,6 @@ class KhlaSiKoRules:
                 if cls.is_valid_position(land_r, land_c) and board[land_r][land_c] is None:
                     valid_moves.append({'to': (land_r, land_c), 'is_capture': True, 'captured_pos': (nr, nc)})
         return valid_moves
-
     @classmethod
     def get_valid_cow_moves(cls, board, unplaced_cows, cow_pos):
         if unplaced_cows > 0:
@@ -71,10 +69,6 @@ class KhlaSiKoRules:
 
     @classmethod
     def check_winner(cls, board, unplaced_cows, captured_cows):
-        """
-        - Tigers win if they capture 4+ cows (preventing cows from surrounding them).
-        - Cows win if all 4 Tigers have 0 valid moves or jumps available.
-        """
         if captured_cows >= 4:
             return "TIGERS"
 

@@ -7,7 +7,6 @@ class LandmarkSmoother:
         if not current_points:
             self.prev_points = None
             return []
-        
         if self.prev_points is None:
             self.prev_points = current_points
             return current_points
