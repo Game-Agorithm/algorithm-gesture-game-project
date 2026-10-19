@@ -10,6 +10,36 @@ def test_audio_downloader_accepts_youtube_urls_only():
     assert not is_youtube_url("not a URL")
 
 
+def test_camera_startup_explains_legacy_mediapipe_mismatch(monkeypatch):
+    from src import camera, hand_tracker
+
+    opened_cameras = []
+
+    class FakeCamera:
+        def __init__(self, *args, **kwargs):
+            self.released = False
+            opened_cameras.append(self)
+
+        def release(self):
+            self.released = True
+
+    def fail_tracker(**kwargs):
+        raise RuntimeError(
+            "MediaPipe 1.0.1 lacks the legacy solutions API; "
+            "use Python 3.12 and reinstall requirements.txt."
+        )
+
+    monkeypatch.setattr(camera, "Camera", FakeCamera)
+    monkeypatch.setattr(hand_tracker, "HandTracker", fail_tracker)
+
+    opened_camera, tracker, error = game_main._start_camera()
+
+    assert opened_camera is None
+    assert tracker is None
+    assert "MediaPipe 1.0.1 lacks the legacy solutions API" in error
+    assert opened_cameras[0].released
+
+
 def test_vision_worker_retries_camera_startup_failure(monkeypatch):
     worker = game_main.VisionWorker((1, 1))
     monkeypatch.setattr(config, "CAMERA_RETRY_INTERVAL", 0)

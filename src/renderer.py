@@ -12,6 +12,7 @@ Typical frame (see main.py):
 import logging
 import math
 import random
+import textwrap
 
 import pygame
 
@@ -647,13 +648,24 @@ class Renderer:
         else:
             label = "CAMERA ONLINE" if status["online"] else "CAMERA OFFLINE"
         self._text(label, (x + 22, 422), dot, self._font(20), "midleft")
+        gesture_y = 482
+        hints_y = 546
+        reason = ""
         if not status["online"]:
             self._text("MOUSE CONTROL ENABLED", (x, 450), config.GOLD, self._font(17), "midleft")
-        self._text("GESTURE", (x, 482), config.TEXT_MUTED, self._font(15), "midleft")
+            reason = status.get("reason", "")
+            if reason:
+                reason_lines = textwrap.wrap(reason, width=34)
+                for i, line in enumerate(reason_lines[:3]):
+                    self._text(line, (x, 466 + i * 14), config.TEXT_MUTED, self._font(12), "midleft")
+                gesture_y, hints_y = 504, 564
+        self._text("GESTURE", (x, gesture_y), config.TEXT_MUTED, self._font(15), "midleft")
         label = GESTURE_LABELS.get(gesture, gesture)
-        self._text(label, (x, 512), GESTURE_COLORS.get(gesture, config.COW_WHITE), self._font(32), "midleft", glow=True)
+        self._text(label, (x, gesture_y + 30), GESTURE_COLORS.get(gesture, config.COW_WHITE),
+                   self._font(32), "midleft", glow=True)
         for i, line in enumerate(("POINT  aim at a point", "OPEN PALM  select", "THUMBS UP  confirm", "FIST  cancel")):
-            self._text(line, (x, 546 + i * 17), config.TEXT_MUTED, self._font(14, False), "midleft")
+            self._text(line, (x, hints_y + i * (15 if reason else 17)),
+                       config.TEXT_MUTED, self._font(14, False), "midleft")
 
         # --- debug
         if debug_info:
