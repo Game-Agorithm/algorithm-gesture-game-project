@@ -71,6 +71,7 @@ CAMERA_HEIGHT = 480
 
 CAMERA_FLIP = True          # mirror image so moving right moves the cursor right
 CAMERA_MAX_FAILED_READS = 45
+CAMERA_RETRY_INTERVAL = 2.0
 
 
 # ============================================================
@@ -79,7 +80,7 @@ CAMERA_MAX_FAILED_READS = 45
 
 MAX_HANDS = 1
 
-MIN_DETECTION_CONFIDENCE = 0.6
+MIN_DETECTION_CONFIDENCE = 0.45
 MIN_TRACKING_CONFIDENCE = 0.5
 MODEL_COMPLEXITY = 0        # 0 = fastest
 

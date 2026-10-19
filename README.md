@@ -314,6 +314,11 @@ Activate it in PowerShell:
 
 pip install -r requirements.txt
 
+The hand tracker uses MediaPipe's `solutions` API, so keep the pinned MediaPipe
+and OpenCV versions in `requirements.txt` when reinstalling dependencies.
+The optional audio downloader in `assets/sounds/audio_install.py` also requires
+FFmpeg installed and available on `PATH` for MP3 conversion.
+
 Running the Project
 
 After the environment and dependencies are installed:
@@ -618,4 +623,3 @@ Short demonstration video or live demonstration
 License
 
 This project is an educational computer-vision game project.
-

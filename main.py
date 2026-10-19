@@ -112,56 +112,96 @@ class VisionWorker:
 
     def stop(self):
         self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-        self._cleanup()
+        if self._thread is None:
+            self._cleanup()
+            return True
+        self._thread.join(timeout=2.0)
+        if self._thread.is_alive():
+            logger.warning(
+                "Vision thread did not stop within 2 seconds; it will release its resources when it exits."
+            )
+            return False
+        return True
 
     def _cleanup(self):
-        if self._tracker is not None:
-            self._tracker.close()
-        if self._camera is not None:
-            self._camera.release()
+        tracker, camera = self._tracker, self._camera
         self._camera = self._tracker = None
         self.online = False
+        if tracker is not None:
+            try:
+                tracker.close()
+            except Exception:
+                logger.exception("Could not close the hand tracker.")
+        if camera is not None:
+            try:
+                camera.release()
+            except Exception:
+                logger.exception("Could not release the camera.")
 
     def _run(self):
-        import cv2
-
-        self._camera, self._tracker, self.error = _start_camera()
-        self.starting = False
-        if self._camera is None:
-            return
-        self.online = True
         failed, frames, started, frame_id = 0, 0, time.time(), 0
         try:
+            import cv2
+
             while not self._stop.is_set():
+                if self._camera is None:
+                    self.starting = True
+                    self._camera, self._tracker, self.error = _start_camera()
+                    self.starting = False
+                    if self._camera is None or self._tracker is None:
+                        self._cleanup()
+                        self._stop.wait(config.CAMERA_RETRY_INTERVAL)
+                        continue
+                    self.online = True
+                    failed = 0
+
                 if self.paused:
-                    time.sleep(0.05)
+                    self._stop.wait(0.05)
                     continue
-                frame = self._camera.read()
-                if frame is None:
-                    failed += 1
-                    if failed > config.CAMERA_MAX_FAILED_READS:
-                        self.error = "The camera stopped sending frames."
-                        break
-                    time.sleep(0.01)
+                camera, tracker = self._camera, self._tracker
+                if camera is None or tracker is None:
+                    self._cleanup()
                     continue
-                failed = 0
-                results = self._tracker.process(frame)
-                landmarks = self._tracker.get_landmarks(results)
-                if self.draw_landmarks and landmarks:
-                    self._tracker.draw_hands(frame, results)
-                preview = cv2.cvtColor(cv2.resize(frame, self.preview_size), cv2.COLOR_BGR2RGB)
-                frame_id += 1
-                with self._lock:
-                    self._latest = (frame_id, preview, landmarks)
-                frames += 1
-                if time.time() - started >= 1.0:
-                    self.fps, frames, started = frames, 0, time.time()
+                try:
+                    frame = camera.read()
+                    if frame is None:
+                        failed += 1
+                        if failed > config.CAMERA_MAX_FAILED_READS:
+                            self.error = "The camera stopped sending frames."
+                            logger.warning(
+                                "%s Reconnecting in %.1f seconds.",
+                                self.error, config.CAMERA_RETRY_INTERVAL,
+                            )
+                            self._cleanup()
+                            self._stop.wait(config.CAMERA_RETRY_INTERVAL)
+                            continue
+                        self._stop.wait(0.01)
+                        continue
+                    failed = 0
+                    results = tracker.process(frame)
+                    landmarks = tracker.get_landmarks(results)
+                    if self.draw_landmarks and landmarks:
+                        tracker.draw_hands(frame, results)
+                    preview = cv2.cvtColor(cv2.resize(frame, self.preview_size), cv2.COLOR_BGR2RGB)
+                    frame_id += 1
+                    with self._lock:
+                        self._latest = (frame_id, preview, landmarks)
+                    frames += 1
+                    if time.time() - started >= 1.0:
+                        self.fps, frames, started = frames, 0, time.time()
+                except Exception as error:
+                    self.error = str(error)
+                    logger.exception(
+                        "Vision processing failed; reconnecting in %.1f seconds.",
+                        config.CAMERA_RETRY_INTERVAL,
+                    )
+                    self._cleanup()
+                    self._stop.wait(config.CAMERA_RETRY_INTERVAL)
         except Exception as error:
             logger.exception("Vision thread stopped: %s", error)
             self.error = str(error)
         finally:
+            self.starting = False
             self._cleanup()
 
 
