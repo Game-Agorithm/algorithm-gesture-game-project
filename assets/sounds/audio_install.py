@@ -1,13 +1,10 @@
-"""Small GUI for downloading audio the user is authorized to save."""
+"""CustomTkinter GUI for downloading audio the user is authorized to save."""
 
 from pathlib import Path
 import queue
 import shutil
 import threading
 from urllib.parse import urlparse
-
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
 
 
 def is_youtube_url(url):
@@ -25,93 +22,162 @@ def is_youtube_url(url):
 
 
 def main():
-    window = tk.Tk()
+    try:
+        import customtkinter as ctk
+    except ImportError as error:
+        raise RuntimeError(
+            "CustomTkinter is required for the audio downloader. "
+            "Install project requirements with: python -m pip install -r requirements.txt"
+        ) from error
+
+    import tkinter as tk
+    from tkinter import filedialog
+
+    ctk.set_appearance_mode("system")
+    ctk.set_default_color_theme("blue")
+    window = ctk.CTk()
     window.title("YouTube Audio Downloader")
-    window.resizable(False, False)
+    window.geometry("620x390")
+    window.minsize(560, 360)
 
     events = queue.Queue()
-    url_value = tk.StringVar()
-    folder_value = tk.StringVar(value=str(Path.home() / "Music"))
-    authorized_value = tk.BooleanVar(value=False)
-    status_value = tk.StringVar(value="Ready")
+    frame = ctk.CTkFrame(window, corner_radius=14)
+    frame.pack(fill="both", expand=True, padx=24, pady=24)
+    frame.grid_columnconfigure(0, weight=1)
+    frame.grid_columnconfigure(1, weight=0)
 
-    frame = ttk.Frame(window, padding=16)
-    frame.grid(sticky="nsew")
-    ttk.Label(frame, text="YouTube video URL").grid(row=0, column=0, sticky="w")
-    url_entry = ttk.Entry(frame, textvariable=url_value, width=54)
-    url_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 12))
+    ctk.CTkLabel(frame, text="YouTube video URL").grid(
+        row=0, column=0, sticky="w", padx=(20, 8), pady=(20, 4)
+    )
+    url_entry = ctk.CTkEntry(
+        frame, placeholder_text="https://www.youtube.com/watch?v=..."
+    )
+    url_entry.grid(row=1, column=0, sticky="ew", padx=(20, 8), pady=(0, 14))
 
-    ttk.Label(frame, text="Save audio to").grid(row=2, column=0, sticky="w")
-    folder_entry = ttk.Entry(frame, textvariable=folder_value, width=42)
-    folder_entry.grid(row=3, column=0, sticky="ew", pady=(4, 12))
+    ctk.CTkLabel(frame, text="Save audio to").grid(
+        row=2, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 4)
+    )
+    folder_entry = ctk.CTkEntry(frame)
+    folder_entry.insert(0, str(Path.home() / "Music"))
+    folder_entry.grid(row=3, column=0, sticky="ew", padx=(20, 8), pady=(0, 14))
+
+    def show_message(title, text):
+        dialog = ctk.CTkToplevel(window)
+        dialog.title(title)
+        dialog.transient(window)
+        dialog.resizable(False, False)
+        dialog.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            dialog, text=text, wraplength=390, justify="left"
+        ).grid(row=0, column=0, padx=20, pady=(20, 12), sticky="ew")
+        ctk.CTkButton(
+            dialog, text="OK", command=dialog.destroy, width=100
+        ).grid(row=1, column=0, padx=20, pady=(0, 16))
+        dialog.update_idletasks()
+        dialog.grab_set()
+        dialog.focus_force()
+
+    def paste_link():
+        try:
+            text = window.clipboard_get()
+        except tk.TclError as error:
+            show_message("Paste failed", f"Could not read text from the clipboard: {error}")
+            return "break"
+
+        if url_entry.select_present():
+            start = url_entry.index("sel.first")
+            end = url_entry.index("sel.last")
+            url_entry.delete(start, end)
+            cursor = start
+        else:
+            cursor = url_entry.index("insert")
+
+        url_entry.insert(cursor, text)
+        url_entry.icursor(cursor + len(text))
+        url_entry.focus_set()
+        return "break"
+
+    paste_button = ctk.CTkButton(
+        frame, text="Paste", command=paste_link, width=100
+    )
+    paste_button.grid(row=1, column=1, padx=(0, 20), pady=(0, 14))
 
     def choose_folder():
-        selected = filedialog.askdirectory(initialdir=folder_value.get() or str(Path.home()))
+        selected = filedialog.askdirectory(
+            parent=window,
+            initialdir=folder_entry.get() or str(Path.home()),
+        )
         if selected:
-            folder_value.set(selected)
+            folder_entry.delete(0, "end")
+            folder_entry.insert(0, selected)
 
-    browse_button = ttk.Button(frame, text="Browse...", command=choose_folder)
-    browse_button.grid(row=3, column=1, padx=(8, 0), pady=(4, 12))
+    browse_button = ctk.CTkButton(
+        frame, text="Browse...", command=choose_folder, width=100
+    )
+    browse_button.grid(row=3, column=1, padx=(0, 20), pady=(0, 14))
 
-    authorization = ttk.Checkbutton(
+    authorization = ctk.CTkCheckBox(
         frame,
         text="I own this audio or have permission to download it.",
-        variable=authorized_value,
     )
-    authorization.grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 12))
+    authorization.grid(
+        row=4, column=0, columnspan=2, sticky="w", padx=20, pady=(0, 16)
+    )
 
-    progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
-    progress.grid(row=5, column=0, columnspan=2, sticky="ew")
-    status_label = ttk.Label(frame, textvariable=status_value, wraplength=380)
-    status_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 12))
+    progress = ctk.CTkProgressBar(frame)
+    progress.set(0)
+    progress.grid(row=5, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8))
+    status_label = ctk.CTkLabel(frame, text="Ready", anchor="w", wraplength=520)
+    status_label.grid(
+        row=6, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 14)
+    )
 
     def set_busy(value):
         state = "disabled" if value else "normal"
         url_entry.configure(state=state)
         folder_entry.configure(state=state)
+        paste_button.configure(state=state)
         browse_button.configure(state=state)
         authorization.configure(state=state)
         download_button.configure(state=state)
 
     def download():
-        url = url_value.get().strip()
+        url = url_entry.get().strip()
         if not is_youtube_url(url):
-            messagebox.showerror("Invalid URL", "Enter a valid YouTube video URL.", parent=window)
+            show_message("Invalid URL", "Enter a valid YouTube video URL.")
             return
-        if not authorized_value.get():
-            messagebox.showwarning(
+        if not authorization.get():
+            show_message(
                 "Permission required",
                 "Confirm that you own the audio or have permission to download it.",
-                parent=window,
             )
             return
         if shutil.which("ffmpeg") is None:
-            messagebox.showerror(
+            show_message(
                 "FFmpeg is required",
                 "MP3 conversion requires FFmpeg. Install FFmpeg and add it to PATH, "
                 "then restart this application.",
-                parent=window,
             )
             return
 
-        output_dir = Path(folder_value.get()).expanduser()
+        output_dir = Path(folder_entry.get()).expanduser()
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
         except OSError as error:
-            messagebox.showerror("Save folder error", str(error), parent=window)
+            show_message("Save folder error", str(error))
             return
 
         set_busy(True)
-        progress.configure(value=0)
-        status_value.set("Starting download...")
+        progress.set(0)
+        status_label.configure(text="Starting download...")
 
         def progress_hook(data):
             if data.get("status") == "downloading":
                 total = data.get("total_bytes") or data.get("total_bytes_estimate")
                 percent = data.get("downloaded_bytes", 0) * 100 / total if total else 0
-                events.put(("progress", (percent, f"Downloading... {percent:.1f}%")))
+                events.put(("progress", (percent / 100, f"Downloading... {percent:.1f}%")))
             elif data.get("status") == "finished":
-                events.put(("progress", (100, "Converting audio to MP3...")))
+                events.put(("progress", (1, "Converting audio to MP3...")))
 
         def download_worker():
             try:
@@ -141,12 +207,13 @@ def main():
             threading.Thread(target=download_worker, name="audio-download", daemon=True).start()
         except RuntimeError as error:
             set_busy(False)
-            status_value.set("Could not start the download.")
-            messagebox.showerror("Download error", str(error), parent=window)
+            status_label.configure(text="Could not start the download.")
+            show_message("Download error", str(error))
 
-    download_button = ttk.Button(frame, text="Download MP3", command=download)
-    download_button.grid(row=7, column=0, columnspan=2, sticky="ew")
-    frame.columnconfigure(0, weight=1)
+    download_button = ctk.CTkButton(frame, text="Download MP3", command=download)
+    download_button.grid(
+        row=7, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 20)
+    )
 
     def process_events():
         while True:
@@ -155,21 +222,20 @@ def main():
             except queue.Empty:
                 break
             if kind == "progress":
-                percentage, text = value
-                progress.configure(value=percentage)
-                status_value.set(text)
+                fraction, text = value
+                progress.set(fraction)
+                status_label.configure(text=text)
             elif kind == "complete":
                 set_busy(False)
-                status_value.set("Download complete.")
-                messagebox.showinfo(
+                status_label.configure(text="Download complete.")
+                show_message(
                     "Download complete",
                     f"MP3 saved in:\n{value}",
-                    parent=window,
                 )
             elif kind == "error":
                 set_busy(False)
-                status_value.set("Download failed.")
-                messagebox.showerror("Download failed", value, parent=window)
+                status_label.configure(text="Download failed.")
+                show_message("Download failed", value)
         if window.winfo_exists():
             window.after(100, process_events)
 
