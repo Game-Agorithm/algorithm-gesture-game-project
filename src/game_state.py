@@ -1,22 +1,95 @@
 """Game state and validated turn transitions for Khla Si Ko."""
 
+from typing import Optional
+
+from src import config
 from src.game_rules import KhlaSiKoRules
 
 
 class GameState:
-    def __init__(self):
+    def __init__(
+        self,
+        game_mode: str = config.MODE_SINGLE,
+        player_side: str = config.COW,
+        round_number: int = 1,
+    ):
+        self.game_mode = game_mode              # "single_player" | "two_player"
+        self.player_side = player_side          # side the human plays in single player
+        self.round_number = round_number
+
         self.board = KhlaSiKoRules.get_initial_board()
         self.cows_to_place = KhlaSiKoRules.INITIAL_COWS
         self.captured_cows = 0
         self.active_tigers = KhlaSiKoRules.INITIAL_TIGERS
-        self.current_turn = "C"
-        self.phase = "PLACEMENT"
-        self.winner = None
+        self.current_turn = "C"                 # cows place first
+        self.phase = "PLACEMENT"                # PLACEMENT -> MOVEMENT -> GAME_OVER
+        self.winner = None                      # None | "TIGERS" | "COWS"
         self.selected_pos = None
         self.hovered_pos = None
 
+        # What just happened (place / move / capture / pass / win). The app
+        # reads these with pop_events() to play sounds and animations.
+        self.last_event = None
+        self.event_id = 0
+        self.events = []
+
+    # ------------------------------------------------------------------
+    # Read-only helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def game_over(self) -> bool:
+        return self.winner is not None
+
+    @property
+    def tiger_positions(self):
+        return KhlaSiKoRules.find_pieces(self.board, "T")
+
+    @property
+    def cow_positions(self):
+        return KhlaSiKoRules.find_pieces(self.board, "C")
+
+    @property
+    def cows_remaining(self) -> int:
+        """Cows still alive: waiting to be placed + standing on the board."""
+        return self.cows_to_place + len(self.cow_positions)
+
+    @property
+    def turn_label(self) -> str:
+        return "COW TURN" if self.current_turn == "C" else "TIGER TURN"
+
+    @property
+    def player_piece(self) -> Optional[str]:
+        """'T' / 'C' for the human in single player, None in two player."""
+        if self.game_mode != config.MODE_SINGLE:
+            return None
+        return "T" if self.player_side == config.TIGER else "C"
+
+    @property
+    def bot_piece(self) -> Optional[str]:
+        piece = self.player_piece
+        return None if piece is None else ("C" if piece == "T" else "T")
+
+    @property
+    def is_human_turn(self) -> bool:
+        return not self.winner and self.current_turn != self.bot_piece
+
+    def _emit(self, kind: str, **data):
+        self.event_id += 1
+        self.last_event = {"type": kind, **data}
+        self.events.append(self.last_event)
+
+    def pop_events(self):
+        """Return and clear the events that happened since the last call."""
+        events, self.events = self.events, []
+        return events
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+
     def place_cow(self, row, col):
-        if self.phase != "PLACEMENT" or self.current_turn != "C":
+        if self.winner or self.phase != "PLACEMENT" or self.current_turn != "C":
             return False
 
         valid, _ = KhlaSiKoRules.can_place_cow(
@@ -30,6 +103,7 @@ class GameState:
         if self.cows_to_place == 0:
             self.phase = "MOVEMENT"
 
+        self._emit("place", piece="C", to=(row, col))
         self._finish_turn()
         return True
 
@@ -81,6 +155,10 @@ class GameState:
             self.board[captured_row][captured_col] = None
             self.captured_cows += 1
 
+        self._emit(
+            "capture" if captured_pos is not None else "move",
+            piece=piece, start=start_pos, to=end_pos, captured=captured_pos,
+        )
         self._finish_turn()
         return True
 
@@ -100,13 +178,35 @@ class GameState:
             return False
         return self.move_piece(tiger_start, tiger_end)
 
+    # ------------------------------------------------------------------
+    # Turn handling
+    # ------------------------------------------------------------------
+
     def _finish_turn(self):
+        self.selected_pos = None
         self.switch_turn()
         self.update_winner()
+        self._pass_if_blocked()
 
     def switch_turn(self):
         if not self.winner:
             self.current_turn = "T" if self.current_turn == "C" else "C"
+
+    def _pass_if_blocked(self):
+        """If the side to move has no legal action, the turn passes to the
+        other side (otherwise the game would freeze)."""
+        if self.winner:
+            return
+        side = self.current_turn
+        if KhlaSiKoRules.side_has_moves(self.board, self.cows_to_place, side):
+            return
+        other = "T" if side == "C" else "C"
+        if not KhlaSiKoRules.side_has_moves(self.board, self.cows_to_place, other):
+            # Nobody can move: the tigers are boxed in, so the cows win.
+            self.set_winner("COWS")
+            return
+        self.current_turn = other
+        self._emit("pass", side=side)
 
     def update_winner(self):
         winner = KhlaSiKoRules.check_winner(
@@ -118,3 +218,5 @@ class GameState:
     def set_winner(self, winner_code):
         self.winner = winner_code
         self.phase = "GAME_OVER"
+        self.selected_pos = None
+        self._emit("win", winner=winner_code)
