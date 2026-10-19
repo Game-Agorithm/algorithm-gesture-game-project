@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 Landmarks = List[Tuple[float, float, float]]
 
 
+class HandTrackerUnavailableError(RuntimeError):
+    retryable = False
+
+
 class LandmarkSmoother:
     """Exponential smoothing for a list of (x, y) points (reduces jitter)."""
 
@@ -60,9 +64,10 @@ class HandTracker:
         # uses the older, self-contained API, so mediapipe must be 0.10.14.
         mp_solutions = getattr(mp, "solutions", None)
         if mp_solutions is None:
-            raise RuntimeError(
-                f"MediaPipe {getattr(mp, '__version__', '?')} lacks the legacy "
-                "solutions API; use Python 3.12 and reinstall requirements.txt."
+            raise HandTrackerUnavailableError(
+                f"Gesture camera unavailable: MediaPipe "
+                f"{getattr(mp, '__version__', '?')} is incompatible. "
+                "Use mouse controls or install the project requirements in Python 3.12."
             )
 
         # MediaPipe modules

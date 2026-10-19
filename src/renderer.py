@@ -95,29 +95,13 @@ class Renderer:
             self.latin_path = str(config.FONT_FILE)
         else:
             self.latin_path = pygame.font.match_font(config.SYSTEM_FONTS)
-        self.khmer_path = pygame.font.match_font(config.SYSTEM_KHMER_FONTS)
-        if self.khmer_path is None and self.latin_path:
-            self.khmer_path = self.latin_path        # test below decides if it works
         self._fonts = {}
-        self.khmer_ok = False
-        try:
-            # A font without Khmer draws the same "missing glyph" box for every
-            # Khmer letter, so two different letters must look different.
-            probe = pygame.font.Font(self.khmer_path, 40)
-            a = pygame.image.tostring(probe.render("ខ", True, (255, 255, 255)), "RGBA")
-            b = pygame.image.tostring(probe.render("គ", True, (255, 255, 255)), "RGBA")
-            self.khmer_ok = a != b
-        except (pygame.error, OSError, TypeError):
-            self.khmer_ok = False
-        if not self.khmer_ok:
-            logger.info("No Khmer-capable font found; using Latin title only.")
 
-    def _font(self, size, bold=True, khmer=False):
-        key = (size, bold, khmer)
+    def _font(self, size, bold=True):
+        key = (size, bold)
         if key not in self._fonts:
-            path = self.khmer_path if khmer else self.latin_path
             try:
-                font = pygame.font.Font(path, size)
+                font = pygame.font.Font(self.latin_path, size)
             except (pygame.error, OSError):
                 font = pygame.font.Font(None, int(size * 1.2))
             font.set_bold(bold)
@@ -438,16 +422,12 @@ class Renderer:
 
     def _title_block(self, y):
         cx = self.width // 2
-        if self.khmer_ok:
-            self._text(config.GAME_TITLE_KHMER, (cx, y), config.TIGER_ORANGE,
-                       self._font(86, khmer=True), "center", glow=True)
-            y += 82
         self._text("KHLA SI KO", (cx, y), config.NEON_CYAN, self._font(62), "center", glow=True)
         self._text(config.GAME_SUBTITLE, (cx, y + 52), config.TEXT_MUTED, self._font(20, bold=False), "center")
 
     def draw_title(self, selected=0):
         self._begin_frame()
-        self._title_block(95 if self.khmer_ok else 120)
+        self._title_block(120)
         bob = 8 * math.sin(self.t * 2)
         self._draw_piece("T", (210, 215 + int(bob)), 1.6)
         self._draw_piece("C", (self.width - 210, 215 - int(bob)), 1.6)
@@ -456,7 +436,7 @@ class Renderer:
                  ("two", "TWO PLAYER", config.NEON_PURPLE, "two"),
                  ("settings", "SETTINGS", config.GOLD, "gear"),
                  ("exit", "EXIT", config.DANGER_RED, "exit")]
-        top = 335 if self.khmer_ok else 300
+        top = 300
         for i, (bid, label, color, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 200, top + i * 66, 400, 54), label, i == selected, color, glyph)
         self._text("Mouse  •  Hand gestures  •  Keyboard", (self.width // 2, self.height - 46),
@@ -681,11 +661,7 @@ class Renderer:
         pygame.draw.line(self.screen, config.NEON_PURPLE, (0, 80), (self.width, 80), 2)
         self._draw_piece("T", (52, 52), 0.55, glow=False)
         title_x = 92
-        if self.khmer_ok:
-            self._text(config.GAME_TITLE_KHMER, (title_x, 42), config.TIGER_ORANGE, self._font(26, khmer=True), "midleft")
-            self._text("KHLA SI KO", (title_x, 66), config.NEON_CYAN, self._font(17), "midleft")
-        else:
-            self._text("KHLA SI KO", (title_x, 52), config.NEON_CYAN, self._font(32), "midleft", glow=True)
+        self._text("KHLA SI KO", (title_x, 52), config.NEON_CYAN, self._font(32), "midleft", glow=True)
         self._text(f"ROUND {state.round_number:02d}", (self.width - 40, 42), config.GOLD, self._font(26), "midright", glow=True)
         mode = ("SINGLE PLAYER  •  YOU: " + ("TIGER" if state.player_piece == "T" else "COW")
                 if state.game_mode == config.MODE_SINGLE else "TWO PLAYER")

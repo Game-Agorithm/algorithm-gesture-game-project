@@ -24,9 +24,8 @@ def test_camera_startup_explains_legacy_mediapipe_mismatch(monkeypatch):
             self.released = True
 
     def fail_tracker(**kwargs):
-        raise RuntimeError(
-            "MediaPipe 1.0.1 lacks the legacy solutions API; "
-            "use Python 3.12 and reinstall requirements.txt."
+        raise hand_tracker.HandTrackerUnavailableError(
+            "Gesture camera unavailable: MediaPipe 1.0.1 is incompatible."
         )
 
     monkeypatch.setattr(camera, "Camera", FakeCamera)
@@ -36,8 +35,28 @@ def test_camera_startup_explains_legacy_mediapipe_mismatch(monkeypatch):
 
     assert opened_camera is None
     assert tracker is None
-    assert "MediaPipe 1.0.1 lacks the legacy solutions API" in error
-    assert opened_cameras[0].released
+    assert "MediaPipe 1.0.1 is incompatible" in str(error)
+    assert not opened_cameras
+
+
+def test_vision_worker_uses_mouse_fallback_for_unsupported_tracker(monkeypatch):
+    from src.hand_tracker import HandTrackerUnavailableError
+
+    worker = game_main.VisionWorker((1, 1))
+    monkeypatch.setattr(config, "CAMERA_RETRY_INTERVAL", 0)
+    attempts = []
+
+    def start_camera():
+        attempts.append(True)
+        return None, None, HandTrackerUnavailableError("Gesture tracking unavailable.")
+
+    monkeypatch.setattr(game_main, "_start_camera", start_camera)
+
+    worker._run()
+
+    assert len(attempts) == 1
+    assert worker.error == "Gesture tracking unavailable."
+    assert not worker.online
 
 
 def test_vision_worker_retries_camera_startup_failure(monkeypatch):

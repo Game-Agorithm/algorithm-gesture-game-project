@@ -15,7 +15,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 GAME_TITLE = "Khla Si Ko - Tiger Eat Cow"
-GAME_TITLE_KHMER = "ខ្លាស៊ីគោ"
 GAME_SUBTITLE = "KHMER TRADITION × COMPUTER VISION"
 
 
@@ -163,13 +162,8 @@ COW_SOUND = SOUND_FILES["cow_move"]
 # FONT
 # ============================================================
 
-FONT_FILE = FONT_DIR / "game_font.ttf"     # optional; Khmer-capable is best
-SYSTEM_FONTS = "segoeui,arial,helveticaneue,dejavusans,liberationsans,freesans"
-SYSTEM_KHMER_FONTS = (
-    "khmerui,leelawadeeui,notosanskhmer,notosanskhmerui,daunpenh,moolboran,"
-    "khmerossystem,khmeros,khmermn,khmersangammn"
-)
-
+FONT_FILE = FONT_DIR / "Poppins-Regular.ttf"
+SYSTEM_FONTS = "poppins,segoeui,arial,helveticaneue,dejavusans,liberationsans,freesans"
 TITLE_FONT_SIZE = 48
 BIG_FONT_SIZE = 40
 MEDIUM_FONT_SIZE = 28

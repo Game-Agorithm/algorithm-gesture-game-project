@@ -46,17 +46,11 @@ def _start_camera():
     On any problem camera/tracker are None and the game stays playable
     with the mouse.
     """
-    camera = None
+    camera = tracker = None
     try:
         from src.camera import Camera
-        from src.hand_tracker import HandTracker
+        from src.hand_tracker import HandTracker, HandTrackerUnavailableError
 
-        camera = Camera(
-            config.CAMERA_INDEX,
-            config.CAMERA_WIDTH,
-            config.CAMERA_HEIGHT,
-            flip=config.CAMERA_FLIP,
-        )
         tracker = HandTracker(
             max_num_hands=config.MAX_HANDS,
             detection_confidence=config.MIN_DETECTION_CONFIDENCE,
@@ -64,10 +58,29 @@ def _start_camera():
             draw_landmarks=config.SHOW_LANDMARKS,
             model_complexity=config.MODEL_COMPLEXITY,
         )
+        camera = Camera(
+            config.CAMERA_INDEX,
+            config.CAMERA_WIDTH,
+            config.CAMERA_HEIGHT,
+            flip=config.CAMERA_FLIP,
+        )
         return camera, tracker, ""
     except Exception as error:      # missing webcam, missing/wrong mediapipe, cv2 errors...
         if camera is not None:
-            camera.release()
+            try:
+                camera.release()
+            except Exception:
+                logger.exception("Could not release the camera after startup failed.")
+        if tracker is not None:
+            try:
+                tracker.close()
+            except Exception:
+                logger.exception("Could not close the tracker after startup failed.")
+        if "HandTrackerUnavailableError" in locals() and isinstance(
+            error, HandTrackerUnavailableError
+        ):
+            logger.warning("%s", error)
+            return None, None, error
         logger.warning("Camera input unavailable; use the mouse instead. (%s)", error)
         return None, None, str(error)
 
@@ -146,10 +159,14 @@ class VisionWorker:
             while not self._stop.is_set():
                 if self._camera is None:
                     self.starting = True
-                    self._camera, self._tracker, self.error = _start_camera()
+                    camera, tracker, error = _start_camera()
+                    self._camera, self._tracker = camera, tracker
+                    self.error = str(error)
                     self.starting = False
                     if self._camera is None or self._tracker is None:
                         self._cleanup()
+                        if getattr(error, "retryable", True) is False:
+                            break
                         self._stop.wait(config.CAMERA_RETRY_INTERVAL)
                         continue
                     self.online = True
