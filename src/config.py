@@ -163,8 +163,8 @@ COW_SOUND = SOUND_FILES["cow_move"]
 # FONT
 # ============================================================
 
-FONT_FILE = FONT_DIR / "game_font.ttf"     # optional; Khmer-capable is best
-SYSTEM_FONTS = "segoeui,arial,helveticaneue,dejavusans,liberationsans,freesans"
+FONT_FILE = FONT_DIR / "Poppins-Regular.ttf"
+SYSTEM_FONTS = "poppins,segoeui,arial,helveticaneue,dejavusans,liberationsans,freesans"
 SYSTEM_KHMER_FONTS = (
     "khmerui,leelawadeeui,notosanskhmer,notosanskhmerui,daunpenh,moolboran,"
     "khmerossystem,khmeros,khmermn,khmersangammn"
