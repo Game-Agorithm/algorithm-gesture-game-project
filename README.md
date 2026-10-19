@@ -312,6 +312,12 @@ Activate it in PowerShell:
 
 .venv\Scripts\Activate.ps1
 
+If an existing `.venv` was created with Python 3.13, it cannot be reused for
+this project. Create and activate a separate Python 3.12 environment instead:
+
+py -3.12 -m venv .venv312
+.venv312\Scripts\Activate.ps1
+
 3. Install Dependencies
 
 pip install -r requirements.txt
