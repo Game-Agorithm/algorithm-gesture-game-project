@@ -5,11 +5,11 @@ import random
 import pytest
 
 from src import config
-from src.game_rules import KhlaSiKoRules as Rules, SimpleBot
+from src.game_rules import Board, KhlaSiKoRules as Rules, SimpleBot
 from src.game_state import GameState
 
 
-def empty_board():
+def empty_board() -> Board:
     return [[None] * 4 for _ in range(4)]
 
 
@@ -208,8 +208,11 @@ def test_blocked_side_passes_instead_of_freezing():
 def test_nobody_can_move_means_cows_win():
     """A completely full board: neither side can act, so the tigers are boxed in."""
     state = movement_state(turn="C")
-    state.board = [["T" if (r, c) in [(0, 0), (0, 3), (3, 0), (3, 3)] else "C" for c in range(4)]
-                   for r in range(4)]
+    for r in range(4):
+        for c in range(4):
+            state.board[r][c] = (
+                "T" if (r, c) in [(0, 0), (0, 3), (3, 0), (3, 3)] else "C"
+            )
     state._pass_if_blocked()
     assert state.winner == "COWS"
 
@@ -231,6 +234,7 @@ def test_tiger_bot_takes_a_capture_when_available():
     bot = SimpleBot("T", random.Random(1))
     for _ in range(20):
         action = bot.choose_action(board, 0)
+        assert action is not None
         assert action["type"] == "move"
         assert (action["start"], action["end"]) == ((0, 0), (0, 2))
 
@@ -241,6 +245,7 @@ def test_cow_bot_avoids_an_obviously_bad_placement():
     bot = SimpleBot("C", random.Random(2))
     for _ in range(20):
         action = bot.choose_action(board, 5)
+        assert action is not None
         assert action["type"] == "place"
         row, col = action["position"]
         test = [r[:] for r in board]
