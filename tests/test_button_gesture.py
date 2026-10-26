@@ -77,7 +77,7 @@ def test_gameplay_controls_are_clickable_with_open_palm():
     app.toggle_camera = Mock()
 
     for button in ("reset", "menu", "camera"):
-        renderer.hovered_button = button
+        setattr(renderer, "hovered_button", button)
         assert app._update_button_gesture(False, True) is True
 
     app.restart.assert_called_once_with()
@@ -116,7 +116,7 @@ def test_board_pointer_hits_screen_positions_of_rendered_nodes():
 
 def test_camera_pointer_is_drawn_blue():
     renderer = Renderer.__new__(Renderer)
-    renderer.screen = object()
+    setattr(renderer, "screen", object())
     renderer.palette = {"text": (255, 255, 255)}
 
     with patch("src.renderer.pygame.draw.circle") as draw_circle:
@@ -133,7 +133,7 @@ def test_gameplay_controls_highlight_under_camera_pointer():
         "accent": (3, 3, 3),
         "muted": (4, 4, 4),
     }
-    renderer._button = lambda *args: calls.append(args)
+    setattr(renderer, "_button", lambda *args: calls.append(args))
     calls = []
 
     renderer._draw_game_controls((500, 670), camera_on=True)
