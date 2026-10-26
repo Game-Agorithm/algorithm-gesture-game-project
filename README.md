@@ -334,6 +334,17 @@ After the environment and dependencies are installed:
 
 python main.py
 
+The webcam starts automatically when the application opens. Point with only
+your index finger and hold the blue on-screen pointer over a button for three
+seconds to click it. In a game, the existing open-palm, thumbs-up, and fist
+gestures continue to select, confirm, and cancel board actions.
+
+Game flow: title screen → game style selection → game mode → side selection
+(single player only) → game. Choose **Modern Tech** for the original neon
+appearance or **Natural Mountain Jungle** for a procedural mountain-and-forest
+environment. The selected style remains active for the whole game and when
+restarting a round.
+
 The application should provide:
 
 Main Menu

@@ -69,6 +69,9 @@ class Renderer:
         self._glow_cache = {}
         self._image_cache = {}
         self._pieces = self._load_piece_images()
+        self.game_style = config.DEFAULT_GAME_STYLE
+        self.palette = config.GAME_STYLES[self.game_style]
+        self._style_previews = {}
         self.bg = self._build_background()
         self.board_surface = self._build_board_surface()
 
@@ -84,6 +87,17 @@ class Renderer:
         self.particles = []
         self.buttons = []
         self._rng = random.Random(3)
+
+    def set_style(self, style):
+        if style not in config.GAME_STYLES:
+            raise ValueError(f"Unknown game style: {style!r}")
+        if style == self.game_style:
+            return
+        self.game_style = style
+        self.palette = config.GAME_STYLES[style]
+        self.bg = self._build_background()
+        self.board_surface = self._build_board_surface()
+        self._glow_cache.clear()
 
     # ==================================================================
     # Fonts and text
@@ -118,8 +132,9 @@ class Renderer:
             self._text_cache[key] = img
         return img
 
-    def _text(self, text, position, color=config.COW_WHITE, font=None, anchor="topleft", glow=False):
+    def _text(self, text, position, color=None, font=None, anchor="topleft", glow=False):
         """Draw text. ``anchor`` is any pygame Rect attribute (center, midtop...)."""
+        color = self.palette["text"] if color is None else color
         font = font or self.small_font
         img = self._render(text, font, color)
         rect = img.get_rect(**{anchor: position})
@@ -137,26 +152,46 @@ class Renderer:
 
     def _load_piece_images(self):
         images = {}
-        for piece, path in (("T", config.TIGER_IMAGE), ("C", config.COW_IMAGE)):
-            try:
-                images[piece] = pygame.image.load(str(path)).convert_alpha()
-            except (pygame.error, FileNotFoundError, OSError) as error:
-                logger.warning("Image %s missing (%s); drawing a shape instead.", path, error)
-                images[piece] = None
+        for style, palette in config.GAME_STYLES.items():
+            for piece, asset_key in (("T", "tiger_image"), ("C", "cow_image")):
+                path = palette[asset_key]
+                try:
+                    images[(style, piece)] = pygame.image.load(str(path)).convert_alpha()
+                except (pygame.error, FileNotFoundError, OSError) as error:
+                    logger.info("Optional %s image %s unavailable (%s); using a drawn token.",
+                                style, path, error)
+                    images[(style, piece)] = None
         return images
 
     def _piece_image(self, piece, size):
-        key = (piece, size)
+        key = (self.game_style, piece, size)
         if key not in self._image_cache:
-            source = self._pieces.get(piece)
+            source = self._pieces.get((self.game_style, piece))
             if source is not None:
                 img = pygame.transform.smoothscale(source, (size, size))
+            elif self.game_style == config.GAME_STYLE_JUNGLE:
+                img = pygame.Surface((size, size), pygame.SRCALPHA)
+                radius = size // 2 - 3
+                base = self.palette["tiger"] if piece == "T" else self.palette["cow"]
+                pygame.draw.circle(img, (35, 43, 28, 100), (size // 2 + 2, size // 2 + 4), radius)
+                pygame.draw.circle(img, base, (size // 2, size // 2), radius)
+                border = (83, 56, 37) if piece == "T" else (129, 98, 64)
+                pygame.draw.circle(img, border, (size // 2, size // 2), radius, max(2, size // 18))
+                if piece == "T":
+                    for offset in (-size // 5, size // 5):
+                        pygame.draw.line(img, (50, 43, 31), (size // 2 + offset - 4, size // 4),
+                                         (size // 2 + offset + 4, size * 3 // 4), max(2, size // 12))
+                else:
+                    pygame.draw.ellipse(img, (121, 80, 53), (size // 4, size // 4, size // 5, size // 4))
+                    pygame.draw.ellipse(img, (121, 80, 53), (size // 2, size // 2, size // 4, size // 5))
+                label = self._render(piece, self._font(size // 3), (44, 42, 31))
+                img.blit(label, label.get_rect(center=(size // 2, size // 2)))
             else:                                   # fallback: simple drawn token
                 img = pygame.Surface((size, size), pygame.SRCALPHA)
                 color = config.TIGER_ORANGE if piece == "T" else config.COW_WHITE
                 pygame.draw.circle(img, color, (size // 2, size // 2), size // 2 - 3)
                 pygame.draw.circle(img, _scale(color, 0.5), (size // 2, size // 2), size // 2 - 3, 3)
-                label = self._render(piece, self._font(size // 2), config.NEON_BG)
+                label = self._render(piece, self._font(size // 2), self.palette["ground"])
                 img.blit(label, label.get_rect(center=(size // 2, size // 2)))
             self._image_cache[key] = img
         return self._image_cache[key]
@@ -172,6 +207,8 @@ class Renderer:
         return self._glow_cache[key]
 
     def _glow(self, center, radius, color, strength=1.0):
+        if not self.palette["glow"]:
+            return
         surf = self._glow_surface(radius, color)
         if strength < 1.0:
             surf = surf.copy()
@@ -180,11 +217,13 @@ class Renderer:
                          special_flags=pygame.BLEND_RGB_ADD)
 
     def _ring(self, center, radius, color, width=3, glow=True):
-        if glow and config.NEON_MODE:
+        if glow and config.NEON_MODE and self.palette["glow"]:
             self._glow(center, int(radius) + 26, color, 0.8)
         pygame.draw.circle(self.screen, color, center, int(radius), width)
 
     def _build_background(self):
+        if self.game_style == config.GAME_STYLE_JUNGLE:
+            return self._build_jungle_background()
         bg = pygame.Surface((self.width, self.height))
         for y in range(self.height):
             k = y / self.height
@@ -203,14 +242,205 @@ class Renderer:
         bg.blit(pygame.transform.flip(motif, False, True), (0, self.height - 22))
         return bg
 
+    def _build_style_preview(self, style, size):
+        if style == config.GAME_STYLE_JUNGLE:
+            preview = pygame.transform.smoothscale(self._build_jungle_background(), size)
+            return preview
+
+        preview = pygame.Surface(size)
+        for y in range(size[1]):
+            k = y / max(1, size[1])
+            color = tuple(int(a + (b - a) * k) for a, b in zip((5, 8, 22), (15, 9, 42)))
+            pygame.draw.line(preview, color, (0, y), (size[0], y))
+        for x in range(20, size[0], 32):
+            pygame.draw.line(preview, (0, 87, 106), (x, 12), (x, size[1] - 12), 1)
+        for y in range(20, size[1], 28):
+            pygame.draw.line(preview, (0, 87, 106), (12, y), (size[0] - 12, y), 1)
+        pygame.draw.rect(preview, (23, 28, 60), (size[0] // 2 - 70, 35, 140, 110), 2, border_radius=10)
+        pygame.draw.line(preview, config.NEON_CYAN, (size[0] // 2 - 48, 55), (size[0] // 2 + 48, 55), 3)
+        pygame.draw.line(preview, config.NEON_CYAN, (size[0] // 2 - 48, 55), (size[0] // 2 - 48, 122), 3)
+        pygame.draw.line(preview, config.NEON_CYAN, (size[0] // 2 + 48, 55), (size[0] // 2 + 48, 122), 3)
+        pygame.draw.line(preview, config.NEON_CYAN, (size[0] // 2 - 48, 122), (size[0] // 2 + 48, 122), 3)
+        pygame.draw.circle(preview, config.NEON_PURPLE, (size[0] // 2, size[1] // 2), 8)
+        return preview
+
+    def draw_style_select(self, selected_style, selected_button=0):
+        self._begin_frame()
+        self._text("SELECT YOUR GAME STYLE", (self.width // 2, 72),
+                   self.palette["accent"], self._font(46), "center", glow=self.palette["glow"])
+        self._text("Choose your environment", (self.width // 2, 116),
+                   self.palette["muted"], self._font(20, False), "center")
+
+        card_width = min(500, (self.width - 180) // 2)
+        card_height = min(390, self.height - 245)
+        gap = max(28, min(56, (self.width - card_width * 2) // 3))
+        left = (self.width - card_width * 2 - gap) // 2
+        top = 155
+        styles = (
+            (config.GAME_STYLE_MODERN, "MODERN TECH", "Neon • Futuristic • Digital"),
+            (config.GAME_STYLE_JUNGLE, "NATURAL MOUNTAIN JUNGLE", "Mountain • Forest • Adventure"),
+        )
+        for index, (style, title, description) in enumerate(styles):
+            rect = pygame.Rect(left + index * (card_width + gap), top, card_width, card_height)
+            is_selected = style == selected_style
+            hovered = rect.collidepoint(pygame.mouse.get_pos())
+            accent = config.GAME_STYLES[style]["accent"]
+            panel = config.GAME_STYLES[style]["panel"]
+            if hovered or is_selected:
+                self._glow(rect.center, card_width // 2, accent, 0.35 if hovered else 0.5)
+            pygame.draw.rect(self.screen, panel, rect, border_radius=22)
+            pygame.draw.rect(self.screen, accent if is_selected or hovered else _scale(accent, 0.55),
+                             rect, 4 if is_selected else 2, border_radius=22)
+
+            preview_rect = pygame.Rect(rect.x + 18, rect.y + 18, rect.w - 36, min(205, rect.h - 145))
+            cache_key = (style, preview_rect.size)
+            preview = self._style_previews.get(cache_key)
+            if preview is None:
+                preview = self._build_style_preview(style, preview_rect.size)
+                self._style_previews[cache_key] = preview
+            self.screen.blit(preview, preview_rect)
+            for piece, x in (("T", preview_rect.x + preview_rect.w // 3),
+                             ("C", preview_rect.x + preview_rect.w * 2 // 3)):
+                image = self._pieces.get((style, piece))
+                if image is not None:
+                    icon_size = min(58, preview_rect.h // 3)
+                    image_key = (style, piece, icon_size)
+                    icon = self._image_cache.get(image_key)
+                    if icon is None:
+                        icon = pygame.transform.smoothscale(image, (icon_size, icon_size))
+                        self._image_cache[image_key] = icon
+                    center = (x, preview_rect.y + preview_rect.h * 3 // 4)
+                    pygame.draw.circle(self.screen, config.GAME_STYLES[style]["panel"],
+                                       center, icon_size // 2 + 5)
+                    self.screen.blit(icon, icon.get_rect(center=center))
+            pygame.draw.rect(self.screen, accent, preview_rect, 2, border_radius=12)
+            self._text(title, (rect.centerx, preview_rect.bottom + 32),
+                       config.GAME_STYLES[style]["text"], self._font(25), "center")
+            self._text(description, (rect.centerx, preview_rect.bottom + 65),
+                       config.GAME_STYLES[style]["muted"], self._font(17, False), "center")
+            label = "✓ SELECTED" if is_selected else "SELECT"
+            self._button(style, (rect.centerx - 100, rect.bottom - 64, 200, 46), label,
+                         is_selected or selected_button == index, accent)
+
+        button_y = self.height - 78
+        self._button("back", (self.width // 2 - 190, button_y, 150, 48),
+                     "BACK", selected_button == 2, self.palette["gold"])
+        self._button("continue", (self.width // 2 + 40, button_y, 190, 48),
+                     "CONTINUE", selected_button == 3, self.palette["highlight"], "play")
+
+    def _build_jungle_background(self):
+        base_width, base_height = 1280, 720
+        bg = pygame.Surface((base_width, base_height))
+        horizon = int(base_height * 0.58)
+        top = self.palette["background_top"]
+        bottom = self.palette["background_bottom"]
+        for y in range(base_height):
+            if y <= horizon:
+                k = y / max(1, horizon)
+                color = tuple(int(a + (b - a) * k) for a, b in zip(top, (205, 218, 165)))
+            else:
+                k = (y - horizon) / max(1, self.height - horizon)
+                color = tuple(int(a + (b - a) * k) for a, b in zip((102, 137, 72), bottom))
+            pygame.draw.line(bg, color, (0, y), (base_width, y))
+
+        sun = pygame.Surface((240, 240), pygame.SRCALPHA)
+        for radius in range(118, 0, -4):
+            alpha = int(1 + 16 * (1 - radius / 118) ** 2)
+            pygame.draw.circle(sun, (255, 238, 168, alpha), (120, 120), radius)
+        bg.blit(sun, (int(base_width * 0.67), 55), special_flags=pygame.BLEND_RGBA_ADD)
+        pygame.draw.circle(bg, (255, 232, 158), (int(base_width * 0.76), 150), 32)
+
+        pygame.draw.polygon(bg, (133, 157, 132), [
+            (0, 380), (0, 300), (140, 180), (245, 295), (370, 135),
+            (530, 315), (705, 170), (870, 320), (1030, 205), (1280, 335),
+            (1280, 430),
+        ])
+        pygame.draw.polygon(bg, (79, 119, 91), [
+            (0, 408), (115, 284), (220, 369), (390, 238), (565, 402),
+            (760, 265), (925, 397), (1080, 278), (1280, 403), (1280, 465),
+        ])
+        pygame.draw.polygon(bg, (57, 93, 65), [
+            (0, 448), (105, 355), (210, 420), (360, 328), (520, 450),
+            (690, 354), (850, 448), (1015, 335), (1160, 425), (1280, 370),
+            (1280, 490),
+        ])
+
+        ground_y = int(base_height * 0.62)
+        pygame.draw.rect(bg, (83, 112, 61), (0, ground_y, base_width, base_height - ground_y))
+        pygame.draw.ellipse(bg, (118, 130, 72), (-130, ground_y - 20, base_width + 240, 260))
+        pygame.draw.ellipse(bg, (92, 111, 58), (120, ground_y + 60, 900, 260))
+
+        # Layered forest canopy behind the game field.
+        rng = random.Random(19)
+        for layer, (base_y, color, count, radius_range) in enumerate((
+            (ground_y + 5, (54, 92, 57), 38, (22, 52)),
+            (ground_y + 34, (35, 73, 48), 28, (28, 58)),
+        )):
+            for i in range(count):
+                x = int(i * base_width / max(1, count - 1) + rng.randint(-18, 18))
+                radius = rng.randint(*radius_range)
+                y = base_y - radius // 2 + rng.randint(-12, 12)
+                pygame.draw.rect(bg, (76, 72, 45), (x - 5, y + radius // 2, 10, radius * 2))
+                pygame.draw.circle(bg, color, (x, y), radius)
+                pygame.draw.circle(bg, _scale(color, 1.13), (x - radius // 3, y - radius // 3), radius // 2)
+
+        # Foreground foliage frames the board without crossing the play area.
+        for side in (0, 1):
+            edge_x = 0 if side == 0 else base_width
+            direction = 1 if side == 0 else -1
+            for i in range(8):
+                y = ground_y + 35 + i * 38
+                reach = 90 + (i % 3) * 24
+                pygame.draw.line(bg, (48, 76, 43), (edge_x, y), (edge_x + direction * reach, y - 18), 7)
+                for leaf in range(4):
+                    lx = edge_x + direction * (reach * (leaf + 1) // 5)
+                    ly = y - 18 - leaf * 3
+                    pygame.draw.ellipse(bg, (57 + leaf * 4, 105 + leaf * 5, 53), (lx - 18, ly - 8, 38, 16))
+
+        # Scatter quiet stones and grass near the bottom edge.
+        for i in range(34):
+            x = rng.randrange(base_width)
+            y = rng.randrange(int(base_height * 0.84), base_height)
+            color = rng.choice(((107, 111, 82), (79, 94, 65), (128, 119, 87)))
+            pygame.draw.ellipse(bg, color, (x, y, rng.randrange(8, 24), rng.randrange(4, 10)))
+        for i in range(90):
+            x = rng.randrange(base_width)
+            y = rng.randrange(ground_y, base_height)
+            pygame.draw.line(bg, (51, 91, 47), (x, y), (x + rng.randrange(-4, 5), y - rng.randrange(4, 12)), 2)
+        return bg if (self.width, self.height) == bg.get_size() else pygame.transform.smoothscale(bg, (self.width, self.height))
+
     def _board_frame_rect(self):
         return pygame.Rect(self.BOARD_LEFT - 55, self.BOARD_TOP - 55,
                            self.BOARD_SIZE + 110, self.BOARD_SIZE + 110)
 
     def _build_board_surface(self):
-        """The static neon board (frame + grid lines) drawn once and reused."""
+        """Build a reusable board frame in the active environment style."""
         frame = self._board_frame_rect()
         surf = pygame.Surface(frame.size, pygame.SRCALPHA)
+        if self.game_style == config.GAME_STYLE_JUNGLE:
+            pygame.draw.rect(surf, (61, 78, 45, 245), surf.get_rect(), border_radius=26)
+            pygame.draw.rect(surf, (118, 105, 68, 255), surf.get_rect().inflate(-18, -18), border_radius=20)
+            pygame.draw.rect(surf, (79, 106, 58, 255), surf.get_rect().inflate(-32, -32), border_radius=18)
+            rng = random.Random(41)
+            for _ in range(160):
+                x = rng.randrange(24, surf.get_width() - 24)
+                y = rng.randrange(24, surf.get_height() - 24)
+                radius = rng.choice((1, 2, 3))
+                pygame.draw.circle(surf, rng.choice(((127, 119, 83, 110), (54, 84, 48, 130), (147, 142, 97, 90))),
+                                   (x, y), radius)
+            pygame.draw.rect(surf, self.palette["frame"], surf.get_rect(), 5, border_radius=26)
+            pygame.draw.rect(surf, (58, 91, 50), surf.get_rect().inflate(-13, -13), 2, border_radius=21)
+            ox, oy = frame.x, frame.y
+            last = KhlaSiKoRules.BOARD_SIZE - 1
+            for index in range(KhlaSiKoRules.BOARD_SIZE):
+                for a, b in ((self.board_node(index, 0), self.board_node(index, last)),
+                             (self.board_node(0, index), self.board_node(last, index))):
+                    a = (a[0] - ox, a[1] - oy)
+                    b = (b[0] - ox, b[1] - oy)
+                    pygame.draw.line(surf, (63, 80, 48, 160), a, b, 8)
+                    pygame.draw.line(surf, self.palette["grid"], a, b, 3)
+            return surf
+
         pygame.draw.rect(surf, (*config.NEON_PANEL, 235), surf.get_rect(), border_radius=26)
         for width, alpha in ((9, 50), (5, 110)):
             pygame.draw.rect(surf, (*config.NEON_PURPLE, alpha), surf.get_rect(), width, border_radius=26)
@@ -253,16 +483,14 @@ class Renderer:
     def camera_point_to_screen(self, x, y):
         """Camera coordinates (0..1) -> screen pixels.
 
-        Only the middle part of the camera image (config.CAMERA_ACTIVE_AREA)
-        is mapped onto the board, so you never need to reach the camera edge.
+        The active camera area maps to the full window for button navigation.
         """
         left, top, right, bottom = config.CAMERA_ACTIVE_AREA
         nx = min(1.0, max(0.0, (x - left) / (right - left)))
         ny = min(1.0, max(0.0, (y - top) / (bottom - top)))
-        margin = 36
         return (
-            round(self.BOARD_LEFT - margin + nx * (self.BOARD_SIZE + 2 * margin)),
-            round(self.BOARD_TOP - margin + ny * (self.BOARD_SIZE + 2 * margin)),
+            round(nx * (self.width - 1)),
+            round(ny * (self.height - 1)),
         )
 
     # ==================================================================
@@ -276,13 +504,23 @@ class Renderer:
         self.t = ticks / 1000.0
         self.buttons = []
         self.screen.blit(self.bg, (0, 0))
-        if config.NEON_MODE:                        # animated grid
+        if self.game_style == config.GAME_STYLE_JUNGLE:
+            self._draw_jungle_ambience()
+        elif config.NEON_MODE:                      # animated grid
             grid = (22, 30, 70)
             for x in range(0, self.width, 64):
                 pygame.draw.line(self.screen, grid, (x, 22), (x, self.height - 22))
             offset = (self.t * 18) % 64
             for y in range(int(offset) + 22, self.height - 22, 64):
                 pygame.draw.line(self.screen, grid, (0, y), (self.width, y))
+
+    def _draw_jungle_ambience(self):
+        for index in range(7):
+            direction = -1 if index % 2 else 1
+            x = int((index * 197 + self.t * (8 + index % 3) * direction) % self.width)
+            y = 165 + (index * 83) % 390 + int(5 * math.sin(self.t * 0.7 + index))
+            color = (220, 208, 130) if index % 3 == 0 else (83, 125, 61)
+            pygame.draw.ellipse(self.screen, color, (x, y, 7, 3))
 
     def present(self):
         self._update_particles()
@@ -351,6 +589,21 @@ class Renderer:
                 return button_id
         return None
 
+    def draw_pointer(self, point, hold_progress=0.0):
+        if point is None:
+            return
+        pygame.draw.circle(self.screen, config.POINTER_BLUE, point, 10)
+        pygame.draw.circle(self.screen, config.COW_WHITE, point, 14, 2)
+        if hold_progress > 0:
+            pygame.draw.arc(
+                self.screen,
+                config.POINTER_BLUE,
+                pygame.Rect(point[0] - 20, point[1] - 20, 40, 40),
+                -math.pi / 2,
+                -math.pi / 2 + math.tau * min(1.0, hold_progress),
+                4,
+            )
+
     def _glyph(self, kind, center, color, size=11):
         x, y = center
         if kind == "play":
@@ -375,18 +628,19 @@ class Renderer:
             for dy in (-8, 0, 8):
                 pygame.draw.line(self.screen, color, (x - size, y + dy), (x + size, y + dy), 4)
 
-    def _button(self, button_id, rect, label, selected=False, color=config.NEON_CYAN, glyph=None):
+    def _button(self, button_id, rect, label, selected=False, color=None, glyph=None):
+        color = self.palette["accent"] if color is None else color
         rect = pygame.Rect(rect)
         self.buttons.append((button_id, rect))
         hover = rect.collidepoint(pygame.mouse.get_pos())
         active = selected or hover
-        if active and config.NEON_MODE:
+        if active and config.NEON_MODE and self.palette["glow"]:
             self._glow(rect.center, max(rect.w, rect.h) // 2 + 30, color, 0.35 + 0.1 * math.sin(self.t * 5))
-        fill = _scale(color, 0.30) if active else config.NEON_PANEL
+        fill = _scale(color, 0.30) if active else self.palette["panel"]
         pygame.draw.rect(self.screen, fill, rect, border_radius=14)
         pygame.draw.rect(self.screen, color if active else _scale(color, 0.55), rect, 3 if active else 2,
                          border_radius=14)
-        text_color = config.COW_WHITE if active else _scale(config.COW_WHITE, 0.8)
+        text_color = self.palette["text"] if active else _scale(self.palette["text"], 0.8)
         room = rect.w - (84 if glyph else 24)
         font = self.medium_font
         if self._render(label, font, text_color).get_width() > room:
@@ -396,18 +650,19 @@ class Renderer:
         if glyph:
             self._glyph(glyph, (rect.x + 30, rect.centery), color)
 
-    def _panel(self, rect, color=config.NEON_PURPLE, alpha=225):
+    def _panel(self, rect, color=None, alpha=225):
+        color = self.palette["accent_secondary"] if color is None else color
         rect = pygame.Rect(rect)
         surf = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(surf, (*config.NEON_PANEL, alpha), surf.get_rect(), border_radius=18)
+        pygame.draw.rect(surf, (*self.palette["panel"], alpha), surf.get_rect(), border_radius=18)
         pygame.draw.rect(surf, (*color, 90), surf.get_rect(), 5, border_radius=18)
         pygame.draw.rect(surf, color, surf.get_rect(), 2, border_radius=18)
         self.screen.blit(surf, rect)
 
     def _draw_piece(self, piece, center, scale=1.0, alpha=255, glow=True):
         size = max(8, int(self.PIECE_SIZE * scale))
-        color = config.TIGER_ORANGE if piece == "T" else config.NEON_CYAN
-        if glow and config.NEON_MODE:
+        color = self.palette["tiger"] if piece == "T" else self.palette["cow"]
+        if glow and config.NEON_MODE and self.palette["glow"]:
             pulse = 0.55 + 0.15 * math.sin(self.t * 3 + center[0] * 0.01)
             self._glow(center, int(size * 0.95), color, pulse * alpha / 255)
         img = self._piece_image(piece, size)
@@ -422,8 +677,8 @@ class Renderer:
 
     def _title_block(self, y):
         cx = self.width // 2
-        self._text("KHLA SI KO", (cx, y), config.NEON_CYAN, self._font(62), "center", glow=True)
-        self._text(config.GAME_SUBTITLE, (cx, y + 52), config.TEXT_MUTED, self._font(20, bold=False), "center")
+        self._text("KHLA SI KO", (cx, y), self.palette["accent"], self._font(62), "center", glow=self.palette["glow"])
+        self._text(config.GAME_SUBTITLE, (cx, y + 52), self.palette["muted"], self._font(20, bold=False), "center")
 
     def draw_title(self, selected=0):
         self._begin_frame()
@@ -431,24 +686,24 @@ class Renderer:
         bob = 8 * math.sin(self.t * 2)
         self._draw_piece("T", (210, 215 + int(bob)), 1.6)
         self._draw_piece("C", (self.width - 210, 215 - int(bob)), 1.6)
-        items = [("play", "PLAY GAME", config.NEON_GREEN, "play"),
-                 ("single", "SINGLE PLAYER", config.NEON_CYAN, "single"),
-                 ("two", "TWO PLAYER", config.NEON_PURPLE, "two"),
-                 ("settings", "SETTINGS", config.GOLD, "gear"),
-                 ("exit", "EXIT", config.DANGER_RED, "exit")]
+        items = [("play", "PLAY GAME", self.palette["highlight"], "play"),
+                 ("single", "SINGLE PLAYER", self.palette["accent"], "single"),
+                 ("two", "TWO PLAYER", self.palette["accent_secondary"], "two"),
+                 ("settings", "SETTINGS", self.palette["gold"], "gear"),
+                 ("exit", "EXIT", self.palette["danger"], "exit")]
         top = 300
         for i, (bid, label, color, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 200, top + i * 66, 400, 54), label, i == selected, color, glyph)
         self._text("Mouse  •  Hand gestures  •  Keyboard", (self.width // 2, self.height - 46),
-                   config.TEXT_MUTED, self.small_font, "center")
+                   self.palette["muted"], self.small_font, "center")
 
     def _card(self, bid, rect, title, lines, color, selected, piece=None, glyph=None):
         rect = pygame.Rect(rect)
         self.buttons.append((bid, rect))
         active = selected or rect.collidepoint(pygame.mouse.get_pos())
-        if active:
+        if active and self.palette["glow"]:
             self._glow(rect.center, rect.w // 2 + 60, color, 0.3 + 0.08 * math.sin(self.t * 5))
-        pygame.draw.rect(self.screen, _scale(color, 0.22) if active else config.NEON_PANEL, rect, border_radius=22)
+        pygame.draw.rect(self.screen, _scale(color, 0.22) if active else self.palette["panel"], rect, border_radius=22)
         pygame.draw.rect(self.screen, color if active else _scale(color, 0.5), rect, 4 if active else 2, border_radius=22)
         if piece:
             self._draw_piece(piece, (rect.centerx, rect.y + 120), 1.6)
@@ -460,30 +715,30 @@ class Renderer:
 
     def draw_mode_select(self, selected=0):
         self._begin_frame()
-        self._text("SELECT GAME MODE", (self.width // 2, 80), config.NEON_CYAN, self._font(50), "center", glow=True)
+        self._text("SELECT GAME MODE", (self.width // 2, 80), self.palette["accent"], self._font(50), "center", glow=self.palette["glow"])
         self._card("single", (190, 150, 400, 400), "SINGLE PLAYER",
-                   ["You against the computer.", "Choose Tiger or Cow."], config.NEON_CYAN, selected == 0, glyph="single")
+                   ["You against the computer.", "Choose Tiger or Cow."], self.palette["accent"], selected == 0, glyph="single")
         self._card("two", (690, 150, 400, 400), "TWO PLAYER",
-                   ["Two people take turns.", "One Tiger, one Cow."], config.NEON_PURPLE, selected == 1, glyph="two")
-        self._button("back", (self.width // 2 - 110, 600, 220, 54), "BACK", selected == 2, config.GOLD)
+                   ["Two people take turns.", "One Tiger, one Cow."], self.palette["accent_secondary"], selected == 1, glyph="two")
+        self._button("back", (self.width // 2 - 110, 600, 220, 54), "BACK", selected == 2, self.palette["gold"])
 
     def draw_side_select(self, selected=0):
         self._begin_frame()
-        self._text("CHOOSE YOUR SIDE", (self.width // 2, 80), config.NEON_CYAN, self._font(50), "center", glow=True)
+        self._text("CHOOSE YOUR SIDE", (self.width // 2, 80), self.palette["accent"], self._font(50), "center", glow=self.palette["glow"])
         self._card("tiger", (190, 150, 400, 400), "PLAY AS TIGER",
                    ["Jump over cows to capture them.", f"Capture {config.CAPTURES_TO_WIN} cows to win."],
-                   config.TIGER_ORANGE, selected == 0, piece="T")
+                   self.palette["tiger"], selected == 0, piece="T")
         self._card("cow", (690, 150, 400, 400), "PLAY AS COW",
                    ["Place and move cows safely.", "Trap every tiger to win."],
-                   config.NEON_CYAN, selected == 1, piece="C")
-        self._button("back", (self.width // 2 - 110, 600, 220, 54), "BACK", selected == 2, config.GOLD)
+                   self.palette["cow"], selected == 1, piece="C")
+        self._button("back", (self.width // 2 - 110, 600, 220, 54), "BACK", selected == 2, self.palette["gold"])
 
     def draw_settings(self, options, selected=0):
         """options: list of (button_id, label)."""
         self._begin_frame()
-        self._text("SETTINGS", (self.width // 2, 90), config.GOLD, self._font(54), "center", glow=True)
+        self._text("SETTINGS", (self.width // 2, 90), self.palette["gold"], self._font(54), "center", glow=self.palette["glow"])
         for i, (bid, label) in enumerate(options):
-            color = config.GOLD if bid == "back" else config.NEON_CYAN
+            color = self.palette["gold"] if bid == "back" else self.palette["accent"]
             self._button(bid, (self.width // 2 - 260, 170 + i * 68, 520, 56), label, i == selected, color)
 
     # ==================================================================
@@ -512,15 +767,15 @@ class Renderer:
                 position = (row, col)
                 empty = state.board[row][col] is None
                 if position in valid_destinations:
-                    self._glow(point, 40, config.NEON_GREEN, 0.5 + 0.3 * pulse)
-                    pygame.draw.circle(self.screen, config.NEON_GREEN, point, int(14 + 4 * pulse), 3)
-                    pygame.draw.circle(self.screen, config.NEON_GREEN, point, 6)
+                    self._glow(point, 40, self.palette["highlight"], 0.5 + 0.3 * pulse)
+                    pygame.draw.circle(self.screen, self.palette["highlight"], point, int(14 + 4 * pulse), 3)
+                    pygame.draw.circle(self.screen, self.palette["highlight"], point, 6)
                 elif empty:
-                    pygame.draw.circle(self.screen, config.NEON_BG, point, 12)
-                    pygame.draw.circle(self.screen, config.NEON_CYAN, point, 12, 3)
+                    pygame.draw.circle(self.screen, self.palette["ground"], point, 12)
+                    pygame.draw.circle(self.screen, self.palette["grid"], point, 12, 3)
                 if debug:
                     index = KhlaSiKoRules.node_index(row, col)
-                    self._text(str(index), (point[0] + 20, point[1] + 14), config.TEXT_MUTED, self._font(14, False))
+                    self._text(str(index), (point[0] + 20, point[1] + 14), self.palette["muted"], self._font(14, False))
 
         # pieces
         for row in range(KhlaSiKoRules.BOARD_SIZE):
@@ -542,7 +797,7 @@ class Renderer:
         for fade in self.fades:
             k = (self.t - fade["t0"]) / 0.45
             center = self.board_node(*fade["pos"])
-            self._glow(center, 60, config.COW_WHITE, 1 - k)
+            self._glow(center, 60, self.palette["text"], 1 - k)
             self._draw_piece("C", center, 1 - 0.6 * k, int(255 * (1 - k)), glow=False)
 
         # moving piece with a glow trail
@@ -558,28 +813,23 @@ class Renderer:
 
         # selection / hover / error rings
         if state.selected_pos is not None:
-            self._ring(self.board_node(*state.selected_pos), self.NODE_RADIUS + 8 + 3 * pulse, config.GOLD, 4)
+            self._ring(self.board_node(*state.selected_pos), self.NODE_RADIUS + 8 + 3 * pulse, self.palette["gold"], 4)
         if hover_pos is not None:
-            self._ring(self.board_node(*hover_pos), self.NODE_RADIUS + 16, config.NEON_CYAN, 3)
+            self._ring(self.board_node(*hover_pos), self.NODE_RADIUS + 16, self.palette["accent"], 3)
         if self.error_flash:
             pos, t0 = self.error_flash
             k = (self.t - t0) / 0.5
             if k >= 1:
                 self.error_flash = None
             else:
-                self._ring(self.board_node(*pos), self.NODE_RADIUS + 6 + 10 * k, config.DANGER_RED, 4)
-
-        if pointer is not None:                      # glowing hand cursor
-            self._glow(pointer, 34, config.NEON_CYAN, 0.9)
-            pygame.draw.circle(self.screen, config.COW_WHITE, pointer, 7)
-            pygame.draw.circle(self.screen, config.NEON_CYAN, pointer, 15, 3)
+                self._ring(self.board_node(*pos), self.NODE_RADIUS + 6 + 10 * k, self.palette["danger"], 4)
 
     def _draw_panel(self, state, message, gesture, camera_surface=None, camera_status=None, debug_info=None):
         left, width = 650, 590
         status = camera_status or {"online": False, "reason": ""}
 
         # --- turn card
-        turn_color = config.TIGER_ORANGE if state.current_turn == "T" else config.NEON_CYAN
+        turn_color = self.palette["tiger"] if state.current_turn == "T" else self.palette["cow"]
         self._panel((left, 100, width, 104), turn_color)
         if state.winner:
             title, sub = "GAME OVER", ("TIGERS WIN" if state.winner == "TIGERS" else "COWS WIN")
@@ -593,38 +843,38 @@ class Renderer:
                 sub += f"   •   place a cow ({state.cows_to_place} left)"
         self._draw_piece("T" if state.current_turn == "T" else "C", (left + 62, 152), 0.95)
         self._text(title, (left + 120, 128), turn_color, self._font(40), "midleft", glow=True)
-        self._text(sub, (left + 120, 176), config.TEXT_MUTED, self.small_font, "midleft")
+        self._text(sub, (left + 120, 176), self.palette["muted"], self.small_font, "midleft")
 
         # --- stats tiles
-        stats = [("COWS REMAINING", str(state.cows_remaining), config.NEON_CYAN),
-                 ("TO PLACE", str(state.cows_to_place), config.NEON_GREEN),
-                 ("CAPTURED", f"{state.captured_cows}/{config.CAPTURES_TO_WIN}", config.DANGER_RED)]
+        stats = [("COWS REMAINING", str(state.cows_remaining), self.palette["cow"]),
+                 ("TO PLACE", str(state.cows_to_place), self.palette["highlight"]),
+                 ("CAPTURED", f"{state.captured_cows}/{config.CAPTURES_TO_WIN}", self.palette["danger"])]
         for i, (label, value, tint) in enumerate(stats):
             rect = pygame.Rect(left + i * 200, 216, 190, 96)
             self._panel(rect, tint, 215)
-            self._text(label, (rect.centerx, rect.y + 24), config.TEXT_MUTED, self._font(15), "center")
+            self._text(label, (rect.centerx, rect.y + 24), self.palette["muted"], self._font(15), "center")
             self._text(value, (rect.centerx, rect.y + 62), tint, self._font(44), "center", glow=True)
 
         # --- message
-        self._panel((left, 324, width, 58), config.NEON_PURPLE, 215)
-        self._text(message[:62], (left + 20, 353), config.COW_WHITE, self.small_font, "midleft")
+        self._panel((left, 324, width, 58), self.palette["accent_secondary"], 215)
+        self._text(message[:62], (left + 20, 353), self.palette["text"], self.small_font, "midleft")
 
         # --- camera + gesture
-        self._panel((left, 394, width, 232), config.NEON_GREEN if status["online"] else config.DANGER_RED, 215)
+        self._panel((left, 394, width, 232), self.palette["highlight"] if status["online"] else self.palette["danger"], 215)
         cam_rect = pygame.Rect(left + 14, 408, *self.CAMERA_PREVIEW_SIZE)
         if camera_surface is not None and status["online"]:
             self.screen.blit(camera_surface, cam_rect)
-            pygame.draw.rect(self.screen, config.NEON_GREEN, cam_rect, 2, border_radius=4)
+            pygame.draw.rect(self.screen, self.palette["highlight"], cam_rect, 2, border_radius=4)
         else:
-            pygame.draw.rect(self.screen, config.NEON_BG, cam_rect, border_radius=8)
-            pygame.draw.rect(self.screen, config.TEXT_MUTED, cam_rect, 2, border_radius=8)
+            pygame.draw.rect(self.screen, self.palette["ground"], cam_rect, border_radius=8)
+            pygame.draw.rect(self.screen, self.palette["muted"], cam_rect, 2, border_radius=8)
             self._text("PREVIEW OFF" if status["online"] else "NO CAMERA", cam_rect.center,
-                       config.TEXT_MUTED, self.medium_font, "center")
+                       self.palette["muted"], self.medium_font, "center")
         x = cam_rect.right + 22
-        dot = config.NEON_GREEN if status["online"] else config.DANGER_RED
+        dot = self.palette["highlight"] if status["online"] else self.palette["danger"]
         pygame.draw.circle(self.screen, dot, (x + 7, 422), 7, 0 if status["online"] else 3)
         if status.get("starting"):
-            dot, label = config.GOLD, "CAMERA STARTING..."
+            dot, label = self.palette["gold"], "CAMERA STARTING..."
         else:
             label = "CAMERA ONLINE" if status["online"] else "CAMERA OFFLINE"
         self._text(label, (x + 22, 422), dot, self._font(20), "midleft")
@@ -649,32 +899,32 @@ class Renderer:
 
         # --- debug
         if debug_info:
-            self._panel((left, 636, width, 78), config.GOLD, 220)
+            self._panel((left, 636, width, 78), self.palette["gold"], 220)
             for i, line in enumerate(debug_info[:3]):
-                self._text(line, (left + 14, 648 + i * 22), config.COW_WHITE, self._font(15, False), "midleft")
+                self._text(line, (left + 14, 648 + i * 22), self.palette["text"], self._font(15, False), "midleft")
 
     def draw_game(self, state, message="", gesture="NONE", pointer=None, hover_pos=None,
                   camera_surface=None, camera_status=None, debug_info=None, camera_on=True):
         self._begin_frame()
         # header
-        pygame.draw.rect(self.screen, config.NEON_PANEL, (0, 22, self.width, 58))
-        pygame.draw.line(self.screen, config.NEON_PURPLE, (0, 80), (self.width, 80), 2)
+        pygame.draw.rect(self.screen, self.palette["panel"], (0, 22, self.width, 58))
+        pygame.draw.line(self.screen, self.palette["accent_secondary"], (0, 80), (self.width, 80), 2)
         self._draw_piece("T", (52, 52), 0.55, glow=False)
         title_x = 92
-        self._text("KHLA SI KO", (title_x, 52), config.NEON_CYAN, self._font(32), "midleft", glow=True)
-        self._text(f"ROUND {state.round_number:02d}", (self.width - 40, 42), config.GOLD, self._font(26), "midright", glow=True)
+        self._text("KHLA SI KO", (title_x, 52), self.palette["accent"], self._font(32), "midleft", glow=self.palette["glow"])
+        self._text(f"ROUND {state.round_number:02d}", (self.width - 40, 42), self.palette["gold"], self._font(26), "midright", glow=self.palette["glow"])
         mode = ("SINGLE PLAYER  •  YOU: " + ("TIGER" if state.player_piece == "T" else "COW")
                 if state.game_mode == config.MODE_SINGLE else "TWO PLAYER")
-        self._text(mode, (self.width - 40, 66), config.TEXT_MUTED, self._font(15, False), "midright")
+        self._text(mode, (self.width - 40, 66), self.palette["muted"], self._font(15, False), "midright")
 
         self._draw_board(state, pointer, hover_pos, debug=bool(debug_info))
         self._draw_panel(state, message, gesture, camera_surface, camera_status, debug_info)
 
         # bottom buttons
-        self._button("reset", (75, 650, 160, 48), "RESET", False, config.NEON_GREEN, "restart")
-        self._button("menu", (250, 650, 160, 48), "MENU", False, config.NEON_PURPLE, "menu")
+        self._button("reset", (75, 650, 160, 48), "RESET", False, self.palette["highlight"], "restart")
+        self._button("menu", (250, 650, 160, 48), "MENU", False, self.palette["accent_secondary"], "menu")
         self._button("camera", (425, 650, 180, 48), f"CAMERA: {'ON' if camera_on else 'OFF'}", False,
-                     config.NEON_CYAN if camera_on else config.TEXT_MUTED)
+                     self.palette["accent"] if camera_on else self.palette["muted"])
 
     # ==================================================================
     # Overlays (draw after draw_game, before present)
@@ -682,16 +932,19 @@ class Renderer:
 
     def _dim(self, alpha=170):
         veil = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        veil.fill((3, 5, 15, alpha))
+        shade = (8, 18, 12) if self.game_style == config.GAME_STYLE_JUNGLE else (3, 5, 15)
+        veil.fill((*shade, alpha))
         self.screen.blit(veil, (0, 0))
 
     def draw_pause(self, selected=0):
         self.buttons = []
         self._dim()
-        self._panel((self.width // 2 - 280, 120, 560, 480), config.NEON_PURPLE, 245)
-        self._text("GAME PAUSED", (self.width // 2, 175), config.NEON_CYAN, self._font(50), "center", glow=True)
-        items = [("resume", "RESUME", config.NEON_GREEN, "play"), ("restart", "RESTART", config.GOLD, "restart"),
-                 ("menu", "MAIN MENU", config.NEON_PURPLE, "menu"), ("exit", "EXIT", config.DANGER_RED, "exit")]
+        self._panel((self.width // 2 - 280, 120, 560, 480), self.palette["accent_secondary"], 245)
+        self._text("GAME PAUSED", (self.width // 2, 175), self.palette["accent"], self._font(50), "center", glow=self.palette["glow"])
+        items = [("resume", "RESUME", self.palette["highlight"], "play"),
+                 ("restart", "RESTART", self.palette["gold"], "restart"),
+                 ("menu", "MAIN MENU", self.palette["accent_secondary"], "menu"),
+                 ("exit", "EXIT", self.palette["danger"], "exit")]
         for i, (bid, label, color, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 200, 235 + i * 85, 400, 62), label, i == selected, color, glyph)
 
@@ -699,21 +952,22 @@ class Renderer:
         self.buttons = []
         self._dim(185)
         tigers = state.winner == "TIGERS"
-        color = config.TIGER_ORANGE if tigers else config.NEON_CYAN
+        color = self.palette["tiger"] if tigers else self.palette["cow"]
         if self._rng.random() < 0.25:
             self.burst((self._rng.randint(200, self.width - 200), self._rng.randint(120, 300)),
-                       self._rng.choice([color, config.GOLD, config.NEON_GREEN, config.NEON_PURPLE]), 14, 220)
+                       self._rng.choice([color, self.palette["gold"], self.palette["highlight"], self.palette["accent_secondary"]]), 14, 220)
         self._panel((self.width // 2 - 380, 110, 760, 500), color, 245)
         self._draw_piece("T" if tigers else "C", (self.width // 2, 215), 1.7)
-        self._text("TIGER WINS!" if tigers else "COWS WIN!", (self.width // 2, 330), color, self._font(66), "center", glow=True)
+        self._text("TIGER WINS!" if tigers else "COWS WIN!", (self.width // 2, 330), color, self._font(66), "center", glow=self.palette["glow"])
         self._text("THE HUNT IS COMPLETE" if tigers else "THE TIGER IS BLOCKED", (self.width // 2, 385),
-                   config.TEXT_MUTED, self._font(24), "center")
+                   self.palette["muted"], self._font(24), "center")
         if state.game_mode == config.MODE_SINGLE:
             human_won = (state.winner == "TIGERS") == (state.player_piece == "T")
             self._text("YOU WIN!" if human_won else "THE COMPUTER WINS", (self.width // 2, 435),
-                       config.GOLD if human_won else config.DANGER_RED, self._font(28), "center")
-        items = [("again", "PLAY AGAIN", config.NEON_GREEN, "play"), ("menu", "MAIN MENU", config.NEON_PURPLE, "menu"),
-                 ("exit", "EXIT", config.DANGER_RED, "exit")]
+                       self.palette["gold"] if human_won else self.palette["danger"], self._font(28), "center")
+        items = [("again", "PLAY AGAIN", self.palette["highlight"], "play"),
+                 ("menu", "MAIN MENU", self.palette["accent_secondary"], "menu"),
+                 ("exit", "EXIT", self.palette["danger"], "exit")]
         for i, (bid, label, c, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 345 + i * 235, 495, 215, 60), label, i == selected, c, glyph)
 
