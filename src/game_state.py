@@ -12,10 +12,12 @@ class GameState:
         game_mode: str = config.MODE_SINGLE,
         player_side: str = config.COW,
         round_number: int = 1,
+        game_style: str = config.DEFAULT_GAME_STYLE,
     ):
         self.game_mode = game_mode              # "single_player" | "two_player"
         self.player_side = player_side          # side the human plays in single player
         self.round_number = round_number
+        self.game_style = game_style
 
         self.board = KhlaSiKoRules.get_initial_board()
         self.cows_to_place = KhlaSiKoRules.INITIAL_COWS

@@ -26,13 +26,14 @@ from src.renderer import Renderer
 
 logger = logging.getLogger("khla")
 
-TITLE, MODE_SELECT, SIDE_SELECT, SETTINGS, PLAYING, PAUSED, GAME_OVER = (
-    "TITLE", "MODE_SELECT", "SIDE_SELECT", "SETTINGS", "PLAYING", "PAUSED", "GAME_OVER")
+TITLE, STYLE_SELECT, MODE_SELECT, SIDE_SELECT, SETTINGS, PLAYING, PAUSED, GAME_OVER = (
+    "TITLE", "STYLE_SELECT", "MODE_SELECT", "SIDE_SELECT", "SETTINGS", "PLAYING", "PAUSED", "GAME_OVER")
 
 # Button ids on each menu screen, in the order the renderer draws them
 # (used for keyboard navigation).
 MENU_IDS = {
     TITLE: ["play", "single", "two", "settings", "exit"],
+    STYLE_SELECT: ["modern", "jungle", "back", "continue"],
     MODE_SELECT: ["single", "two", "back"],
     SIDE_SELECT: ["tiger", "cow", "back"],
     PAUSED: ["resume", "restart", "menu", "exit"],
@@ -209,6 +210,8 @@ class App:
     def __init__(self):
         pygame.init()
         self.renderer = Renderer()
+        self.selected_game_style = config.DEFAULT_GAME_STYLE
+        self.renderer.set_style(self.selected_game_style)
         self.audio = AudioManager()
         self.audio.set_muted(not config.SOUND_ENABLED)
         self.recognizer = GestureRecognizer()
@@ -218,13 +221,17 @@ class App:
         self.scene = TITLE
         self.prev_scene = TITLE
         self.menu_index = 0
-        self.pending_mode = config.MODE_SINGLE
+        self.pending_mode = None
 
         self.state = None
         self.bot = None
         self.message = ""
         self.gesture = "NONE"
         self.pointer = None
+        self._button_hold_target = None
+        self._button_hold_started = None
+        self._button_hold_progress = 0.0
+        self._button_gesture_fired = False
         self.hover_pos = None
         self.last_hand_time = 0.0
         self.bot_timer = 0.0
@@ -244,7 +251,8 @@ class App:
     # ==================================================================
 
     def start_game(self, mode, side=config.COW, round_number=1):
-        self.state = GameState(mode, side, round_number)
+        self.state = GameState(mode, side, round_number, self.selected_game_style)
+        self.renderer.set_style(self.state.game_style)
         self.bot = None
         if mode == config.MODE_SINGLE:
             bot_piece = self.state.bot_piece
@@ -385,18 +393,44 @@ class App:
     def activate(self, bid):
         self.audio.play("button_click")
         if bid == "play":
-            self.go(MODE_SELECT)
+            self.pending_mode = None
+            self.go(STYLE_SELECT)
+        elif bid in (config.GAME_STYLE_MODERN, config.GAME_STYLE_JUNGLE):
+            self.selected_game_style = bid
+            self.renderer.set_style(bid)
+        elif bid == "continue":
+            if self.pending_mode == config.MODE_SINGLE:
+                self.go(SIDE_SELECT)
+            elif self.pending_mode == config.MODE_TWO:
+                self.start_game(config.MODE_TWO)
+            else:
+                self.go(MODE_SELECT)
         elif bid == "single":
-            self.pending_mode = config.MODE_SINGLE
-            self.go(SIDE_SELECT)
+            if self.scene == TITLE:
+                self.pending_mode = config.MODE_SINGLE
+                self.go(STYLE_SELECT)
+            else:
+                self.pending_mode = config.MODE_SINGLE
+                self.go(SIDE_SELECT)
         elif bid == "two":
-            self.start_game(config.MODE_TWO)
+            if self.scene == TITLE:
+                self.pending_mode = config.MODE_TWO
+                self.go(STYLE_SELECT)
+            else:
+                self.start_game(config.MODE_TWO)
         elif bid in ("tiger", "cow"):
             self.start_game(config.MODE_SINGLE, config.TIGER if bid == "tiger" else config.COW)
         elif bid == "settings":
             self.go(SETTINGS)
         elif bid == "back":
-            self.go(MODE_SELECT if self.scene == SIDE_SELECT and self.prev_scene == MODE_SELECT else TITLE)
+            if self.scene == STYLE_SELECT:
+                self.go(TITLE)
+            elif self.scene == SIDE_SELECT:
+                self.go(MODE_SELECT if self.prev_scene == MODE_SELECT else STYLE_SELECT)
+            elif self.scene == MODE_SELECT:
+                self.go(STYLE_SELECT)
+            else:
+                self.go(TITLE)
         elif bid == "exit":
             self.running = False
         elif bid == "resume":
@@ -444,6 +478,38 @@ class App:
                     self.activate(bid)
                 elif self.scene == PLAYING:
                     self.handle_board_click(self.renderer.board_position_at(event.pos))
+
+    def _update_button_gesture(self, pointing, now):
+        if not pointing:
+            self._button_hold_target = None
+            self._button_hold_started = None
+            self._button_hold_progress = 0.0
+            self._button_gesture_fired = False
+            return
+
+        button_id = self.renderer.button_at(self.pointer) if self.pointer is not None else None
+        if button_id is None:
+            self._button_hold_target = None
+            self._button_hold_started = None
+            self._button_hold_progress = 0.0
+            return
+
+        if button_id in self.menu_ids():
+            self.menu_index = self.menu_ids().index(button_id)
+
+        if self._button_gesture_fired:
+            return
+        if button_id != self._button_hold_target:
+            self._button_hold_target = button_id
+            self._button_hold_started = now
+            self._button_hold_progress = 0.0
+            return
+
+        held = now - self._button_hold_started
+        self._button_hold_progress = min(1.0, held / config.GESTURE_BUTTON_HOLD_SECONDS)
+        if held >= config.GESTURE_BUTTON_HOLD_SECONDS:
+            self._button_gesture_fired = True
+            self.activate(button_id)
 
     def handle_key(self, key):
         scene = self.scene
@@ -510,35 +576,33 @@ class App:
 
         if not (self.vision.online and self.camera_enabled):
             self.gesture, self.pointer = "NONE", None
-            return
-        if self.scene != PLAYING or self.state is None or not self.state.is_human_turn:
-            self.gesture = self.recognizer.recognize(landmarks, now).gesture
-            self.pointer = None
+            self._update_button_gesture(False, now)
             return
 
         result = self.recognizer.recognize(landmarks, now)
         self.gesture = result.gesture
-        if landmarks:
+        pointing = result.gesture == POINT and result.raw_gesture == POINT
+        if landmarks and pointing:
             self.last_hand_time = now
-            if result.gesture == POINT and result.raw_gesture == POINT:
-                # Only the pointing finger moves the cursor. Once the hand
-                # changes to another gesture the hovered node stays frozen, so
-                # opening the palm cannot drag the selection off the node.
-                tip = self.smoother.smooth([tuple(landmarks[8][:2])])[0]
-                self.pointer = self.renderer.camera_point_to_screen(*tip)
+            tip = self.smoother.smooth([tuple(landmarks[8][:2])])[0]
+            self.pointer = self.renderer.camera_point_to_screen(*tip)
+            if self.scene == PLAYING and self.state is not None and self.state.is_human_turn:
                 node = self.renderer.board_position_at(self.pointer)
                 if node is not None:
                     self.hover_pos = node
-        else:
+        elif not landmarks:
             self.pointer = None
             self.smoother.smooth([])
             if now - self.last_hand_time > config.HOVER_RELEASE_SECONDS and self.hover_pos is not None:
                 self.hover_pos = None
 
-        if result.command in (CMD_SELECT, CMD_CONFIRM):
-            self.handle_board_click(self.hover_pos)
-        elif result.command == CMD_CANCEL:
-            self.cancel_selection()
+        self._update_button_gesture(pointing, now)
+
+        if self.scene == PLAYING and self.state is not None and self.state.is_human_turn:
+            if result.command in (CMD_SELECT, CMD_CONFIRM):
+                self.handle_board_click(self.hover_pos)
+            elif result.command == CMD_CANCEL:
+                self.cancel_selection()
 
     def update(self):
         now = time.time()
@@ -591,6 +655,8 @@ class App:
             r.draw_title(self.menu_index)
         elif self.scene == MODE_SELECT:
             r.draw_mode_select(self.menu_index)
+        elif self.scene == STYLE_SELECT:
+            r.draw_style_select(self.selected_game_style, self.menu_index)
         elif self.scene == SIDE_SELECT:
             r.draw_side_select(self.menu_index)
         elif self.scene == SETTINGS:
@@ -610,6 +676,7 @@ class App:
                 r.draw_pause(self.menu_index)
             elif self.scene == GAME_OVER:
                 r.draw_game_over(self.state, self.menu_index)
+        r.draw_pointer(self.pointer, self._button_hold_progress)
         r.present()
         r.tick()
 

@@ -1,9 +1,14 @@
 import unittest
 
+from src import config
 from src.game_state import GameState
 
 
 class GameStateTests(unittest.TestCase):
+    def test_game_style_defaults_to_modern_and_can_be_selected(self):
+        self.assertEqual(GameState().game_style, config.GAME_STYLE_MODERN)
+        self.assertEqual(GameState(game_style=config.GAME_STYLE_JUNGLE).game_style, config.GAME_STYLE_JUNGLE)
+
     def test_cow_placement_validates_position_and_turn(self):
         state = GameState()
 
