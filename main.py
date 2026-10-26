@@ -11,6 +11,7 @@ Per frame:
 import logging
 import threading
 import time
+from typing import Optional
 
 import pygame
 
@@ -47,17 +48,11 @@ def _start_camera():
     On any problem camera/tracker are None and the game stays playable
     with the mouse.
     """
-    camera = None
+    camera = tracker = None
     try:
         from src.camera import Camera
-        from src.hand_tracker import HandTracker
+        from src.hand_tracker import HandTracker, HandTrackerUnavailableError
 
-        camera = Camera(
-            config.CAMERA_INDEX,
-            config.CAMERA_WIDTH,
-            config.CAMERA_HEIGHT,
-            flip=config.CAMERA_FLIP,
-        )
         tracker = HandTracker(
             max_num_hands=config.MAX_HANDS,
             detection_confidence=config.MIN_DETECTION_CONFIDENCE,
@@ -65,10 +60,29 @@ def _start_camera():
             draw_landmarks=config.SHOW_LANDMARKS,
             model_complexity=config.MODEL_COMPLEXITY,
         )
+        camera = Camera(
+            config.CAMERA_INDEX,
+            config.CAMERA_WIDTH,
+            config.CAMERA_HEIGHT,
+            flip=config.CAMERA_FLIP,
+        )
         return camera, tracker, ""
     except Exception as error:      # missing webcam, missing/wrong mediapipe, cv2 errors...
         if camera is not None:
-            camera.release()
+            try:
+                camera.release()
+            except Exception:
+                logger.exception("Could not release the camera after startup failed.")
+        if tracker is not None:
+            try:
+                tracker.close()
+            except Exception:
+                logger.exception("Could not close the tracker after startup failed.")
+        if "HandTrackerUnavailableError" in locals() and isinstance(
+            error, HandTrackerUnavailableError
+        ):
+            logger.warning("%s", error)
+            return None, None, error
         logger.warning("Camera input unavailable; use the mouse instead. (%s)", error)
         return None, None, str(error)
 
@@ -147,10 +161,14 @@ class VisionWorker:
             while not self._stop.is_set():
                 if self._camera is None:
                     self.starting = True
-                    self._camera, self._tracker, self.error = _start_camera()
+                    camera, tracker, error = _start_camera()
+                    self._camera, self._tracker = camera, tracker
+                    self.error = str(error)
                     self.starting = False
                     if self._camera is None or self._tracker is None:
                         self._cleanup()
+                        if getattr(error, "retryable", True) is False:
+                            break
                         self._stop.wait(config.CAMERA_RETRY_INTERVAL)
                         continue
                     self.online = True
@@ -223,8 +241,8 @@ class App:
         self.menu_index = 0
         self.pending_mode = None
 
-        self.state = None
-        self.bot = None
+        self.state: Optional[GameState] = None
+        self.bot: Optional[SimpleBot] = None
         self.message = ""
         self.gesture = "NONE"
         self.pointer = None
@@ -251,12 +269,15 @@ class App:
     # ==================================================================
 
     def start_game(self, mode, side=config.COW, round_number=1):
-        self.state = GameState(mode, side, round_number, self.selected_game_style)
-        self.renderer.set_style(self.state.game_style)
+        state = GameState(mode, side, round_number)
+        self.state = state
         self.bot = None
         if mode == config.MODE_SINGLE:
-            bot_piece = self.state.bot_piece
-            self.bot = SimpleBot(bot_piece, mistake_rate=config.BOT_MISTAKE_RATE[bot_piece])
+            bot_piece = state.bot_piece
+            if bot_piece is not None:
+                self.bot = SimpleBot(
+                    bot_piece, mistake_rate=config.BOT_MISTAKE_RATE[bot_piece]
+                )
         self.scene = PLAYING
         self.pointer = self.hover_pos = None
         self.bot_timer = 0.0
@@ -266,13 +287,16 @@ class App:
         self.audio.play("button_click")
 
     def restart(self, new_round=False):
-        if self.state is None:
+        state = self.state
+        if state is None:
             return
-        number = self.state.round_number + (1 if new_round else 0)
-        self.start_game(self.state.game_mode, self.state.player_side, number)
+        number = state.round_number + (1 if new_round else 0)
+        self.start_game(state.game_mode, state.player_side, number)
 
     def _prompt(self):
         state = self.state
+        if state is None:
+            return "Start a game to play."
         if state.winner:
             return "Game over."
         if not state.is_human_turn:
@@ -323,14 +347,17 @@ class App:
             self.invalid("That is not a legal move.", position)
 
     def cancel_selection(self):
-        if self.state is not None and self.state.selected_pos is not None:
-            self.state.selected_pos = None
+        state = self.state
+        if state is not None and state.selected_pos is not None:
+            state.selected_pos = None
             self.message = "Selection cancelled."
             self.audio.play("button_click")
 
     def _process_events(self):
         """React to what the rules engine reported: sound, animation, message."""
         state = self.state
+        if state is None:
+            return
         for event in state.pop_events():
             kind = event["type"]
             self.renderer.notify(event)
@@ -610,23 +637,24 @@ class App:
         self._last_update = now
 
         self._update_gestures(now)
-        if self.scene != PLAYING or self.state is None:
+        state = self.state
+        if self.scene != PLAYING or state is None:
             return
 
-        if self.bot is not None and not self.state.winner and self.state.current_turn == self.bot.side:
+        if self.bot is not None and not state.winner and state.current_turn == self.bot.side:
             self.bot_timer += dt
             if self.bot_timer >= config.BOT_DELAY:
                 self.bot_timer = 0.0
-                if not _computer_move(self.state, self.bot):
-                    self.state.update_winner()
+                if not _computer_move(state, self.bot):
+                    state.update_winner()
         self._process_events()
 
         if self.over_at is not None and now >= self.over_at:
             self.over_at = None
             self.scene, self.menu_index = GAME_OVER, 0
-            tigers = self.state.winner == "TIGERS"
+            tigers = state.winner == "TIGERS"
             self.audio.play("tiger_win" if tigers else "cow_win")
-            if self.state.player_piece is not None and tigers != (self.state.player_piece == "T"):
+            if state.player_piece is not None and tigers != (state.player_piece == "T"):
                 self.audio.play("game_over")
 
     # ==================================================================
@@ -635,6 +663,8 @@ class App:
 
     def _debug_lines(self):
         s = self.state
+        if s is None:
+            return []
         index = lambda positions: [self._index(p) for p in positions]
         legal = ([self._index(m["to"]) for m in s.get_valid_moves(s.selected_pos)]
                  if s.selected_pos else [])
@@ -651,6 +681,7 @@ class App:
 
     def draw(self):
         r = self.renderer
+        state = self.state
         if self.scene == TITLE:
             r.draw_title(self.menu_index)
         elif self.scene == MODE_SELECT:
@@ -661,22 +692,21 @@ class App:
             r.draw_side_select(self.menu_index)
         elif self.scene == SETTINGS:
             r.draw_settings(self.settings_options(), self.menu_index)
-        elif self.state is not None:
+        elif state is not None:
             status = {
                 "online": self.vision.online and self.camera_enabled,
                 "starting": self.vision.starting and self.camera_enabled,
                 "reason": self.vision.error,
             }
             r.draw_game(
-                self.state, self.message, self.gesture, self.pointer, self.hover_pos,
+                state, self.message, self.gesture, self.pointer, self.hover_pos,
                 self._preview_surface, status,
                 self._debug_lines() if self.debug else None, self.camera_enabled,
             )
             if self.scene == PAUSED:
                 r.draw_pause(self.menu_index)
             elif self.scene == GAME_OVER:
-                r.draw_game_over(self.state, self.menu_index)
-        r.draw_pointer(self.pointer, self._button_hold_progress)
+                r.draw_game_over(state, self.menu_index)
         r.present()
         r.tick()
 

@@ -171,7 +171,7 @@ Technology
 
 Purpose
 
-Python 3.11+
+Python 3.11-3.12
 
 Main development language
 
@@ -296,26 +296,35 @@ Installation
 
 1. Check Python
 
-The project requires Python 3.11 or newer.
+Use Python 3.11 or 3.12. The pinned MediaPipe release uses the legacy
+`solutions` API and is not compatible with Python 3.13 or the newer MediaPipe
+API.
 
-python --version
+py -3.12 --version
 
 2. Create a Virtual Environment
 
 Windows:
 
-python -m venv .venv
+py -3.12 -m venv .venv
 
 Activate it in PowerShell:
 
 .venv\Scripts\Activate.ps1
 
+If an existing `.venv` was created with Python 3.13, it cannot be reused for
+this project. Create and activate a separate Python 3.12 environment instead:
+
+py -3.12 -m venv .venv312
+.venv312\Scripts\Activate.ps1
+
 3. Install Dependencies
 
 pip install -r requirements.txt
 
-The hand tracker uses MediaPipe's `solutions` API, so keep the pinned MediaPipe
-and OpenCV versions in `requirements.txt` when reinstalling dependencies.
+The hand tracker uses MediaPipe's `solutions` API. Install the pinned
+dependencies in a clean virtual environment; a different MediaPipe release or
+Python version can leave the camera device accessible but disable hand tracking.
 The optional audio downloader in `assets/sounds/audio_install.py` also requires
 FFmpeg installed and available on `PATH` for MP3 conversion.
 

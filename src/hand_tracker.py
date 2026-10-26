@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 Landmarks = List[Tuple[float, float, float]]
 
 
+class HandTrackerUnavailableError(RuntimeError):
+    retryable = False
+
+
 class LandmarkSmoother:
     """Exponential smoothing for a list of (x, y) points (reduces jitter)."""
 
@@ -58,15 +62,17 @@ class HandTracker:
         # MediaPipe 0.10.15+ removed mp.solutions (the hand model moved to the
         # "tasks" API and needs a separate downloaded .task file). This project
         # uses the older, self-contained API, so mediapipe must be 0.10.14.
-        if not hasattr(mp, "solutions"):
-            raise RuntimeError(
-                f"Installed mediapipe {getattr(mp, '__version__', '?')} has no "
-                "'solutions' API. Run:  pip install mediapipe==0.10.14"
+        mp_solutions = getattr(mp, "solutions", None)
+        if mp_solutions is None:
+            raise HandTrackerUnavailableError(
+                f"Gesture camera unavailable: MediaPipe "
+                f"{getattr(mp, '__version__', '?')} is incompatible. "
+                "Use mouse controls or install the project requirements in Python 3.12."
             )
 
         # MediaPipe modules
-        self.mp_hands = mp.solutions.hands
-        self.mp_draw = mp.solutions.drawing_utils
+        self.mp_hands = mp_solutions.hands
+        self.mp_draw = mp_solutions.drawing_utils
 
         # Initialize hand detector
         self.hands = self.mp_hands.Hands(
