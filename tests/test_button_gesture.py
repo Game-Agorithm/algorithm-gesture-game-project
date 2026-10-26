@@ -11,9 +11,17 @@ class ButtonRenderer:
         return self.hovered_button
 
 
+def set_hovered_button(app, button):
+    setattr(app.renderer, "hovered_button", button)
+
+
+def activated_buttons(app):
+    return getattr(app, "_activated_buttons")
+
+
 def make_app():
     app = game_main.App.__new__(game_main.App)
-    app.renderer = ButtonRenderer()
+    setattr(app, "renderer", ButtonRenderer())
     app.pointer = (10, 10)
     app.scene = game_main.TITLE
     app.menu_index = 0
@@ -21,49 +29,50 @@ def make_app():
     app._button_hold_started = None
     app._button_hold_progress = 0.0
     app._button_gesture_fired = False
-    app.activated = []
-    app.activate = app.activated.append
+    activated = []
+    setattr(app, "_activated_buttons", activated)
+    setattr(app, "activate", activated.append)
     return app
 
 
 def test_pointing_must_hold_on_a_button_for_three_seconds():
     app = make_app()
-    app.renderer.hovered_button = "play"
+    set_hovered_button(app, "play")
 
     app._update_button_gesture(True, 1.0)
     app._update_button_gesture(True, 1.0 + config.GESTURE_BUTTON_HOLD_SECONDS - 0.01)
-    assert app.activated == []
+    assert activated_buttons(app) == []
 
     app._update_button_gesture(True, 1.0 + config.GESTURE_BUTTON_HOLD_SECONDS)
     app._update_button_gesture(True, 5.0)
-    assert app.activated == ["play"]
+    assert activated_buttons(app) == ["play"]
 
 
 def test_leaving_a_button_restarts_the_hold_timer():
     app = make_app()
-    app.renderer.hovered_button = "play"
+    set_hovered_button(app, "play")
     app._update_button_gesture(True, 0.0)
 
-    app.renderer.hovered_button = "settings"
+    set_hovered_button(app, "settings")
     app._update_button_gesture(True, 2.0)
     app._update_button_gesture(True, 4.99)
-    assert app.activated == []
+    assert activated_buttons(app) == []
 
     app._update_button_gesture(True, 5.0)
-    assert app.activated == ["settings"]
+    assert activated_buttons(app) == ["settings"]
 
 
 def test_releasing_pointing_allows_another_button_click():
     app = make_app()
-    app.renderer.hovered_button = "play"
+    set_hovered_button(app, "play")
     app._update_button_gesture(True, 0.0)
     app._update_button_gesture(True, config.GESTURE_BUTTON_HOLD_SECONDS)
     app._update_button_gesture(False, 3.1)
-    app.renderer.hovered_button = "exit"
+    set_hovered_button(app, "exit")
     app._update_button_gesture(True, 4.0)
     app._update_button_gesture(True, 4.0 + config.GESTURE_BUTTON_HOLD_SECONDS)
 
-    assert app.activated == ["play", "exit"]
+    assert activated_buttons(app) == ["play", "exit"]
 
 
 def test_camera_pointer_maps_active_area_across_the_full_window():
@@ -98,8 +107,9 @@ def test_game_style_flow_continues_to_mode_and_supports_back_navigation():
             self.styles.append(style)
 
     app = game_main.App.__new__(game_main.App)
-    app.audio = Audio()
-    app.renderer = StyleRenderer()
+    setattr(app, "audio", Audio())
+    renderer = StyleRenderer()
+    setattr(app, "renderer", renderer)
     app.scene = game_main.TITLE
     app.prev_scene = game_main.TITLE
     app.menu_index = 0
@@ -110,7 +120,7 @@ def test_game_style_flow_continues_to_mode_and_supports_back_navigation():
     assert app.scene == game_main.STYLE_SELECT
     app.activate(config.GAME_STYLE_JUNGLE)
     assert app.selected_game_style == config.GAME_STYLE_JUNGLE
-    assert app.renderer.styles == [config.GAME_STYLE_JUNGLE]
+    assert renderer.styles == [config.GAME_STYLE_JUNGLE]
     app.activate("continue")
     assert app.scene == game_main.MODE_SELECT
     app.activate("back")
@@ -123,14 +133,15 @@ def test_direct_single_player_shortcut_still_selects_style_before_side():
             return
 
     app = game_main.App.__new__(game_main.App)
-    app.audio = Audio()
-    app.renderer = ButtonRenderer()
+    setattr(app, "audio", Audio())
+    renderer = ButtonRenderer()
+    setattr(app, "renderer", renderer)
     app.scene = game_main.TITLE
     app.prev_scene = game_main.TITLE
     app.menu_index = 0
     app.pending_mode = None
     app.selected_game_style = config.GAME_STYLE_MODERN
-    app.renderer.set_style = lambda _style: None
+    setattr(renderer, "set_style", lambda _style: None)
 
     app.activate("single")
     assert app.scene == game_main.STYLE_SELECT

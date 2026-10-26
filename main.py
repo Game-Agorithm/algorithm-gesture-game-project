@@ -22,7 +22,7 @@ from src.game_state import GameState
 from src.gesture_recognizer import (
     CMD_CANCEL, CMD_CONFIRM, CMD_SELECT, POINT, GestureRecognizer,
 )
-from src.hand_tracker import LandmarkSmoother
+from src.hand_tracker import HandTrackerUnavailableError, LandmarkSmoother
 from src.renderer import Renderer
 
 logger = logging.getLogger("khla")
@@ -52,7 +52,7 @@ def _start_camera():
     camera = tracker = None
     try:
         from src.camera import Camera
-        from src.hand_tracker import HandTracker, HandTrackerUnavailableError
+        from src.hand_tracker import HandTracker
 
         tracker = HandTracker(
             max_num_hands=config.MAX_HANDS,
@@ -79,9 +79,7 @@ def _start_camera():
                 tracker.close()
             except Exception:
                 logger.exception("Could not close the tracker after startup failed.")
-        if "HandTrackerUnavailableError" in locals() and isinstance(
-            error, HandTrackerUnavailableError
-        ):
+        if isinstance(error, HandTrackerUnavailableError):
             logger.warning("%s", error)
             return None, None, error
         logger.warning("Camera input unavailable; use the mouse instead. (%s)", error)
@@ -296,8 +294,8 @@ class App:
         state = self.state
         if state is None:
             return
-        number = self.state.round_number + (1 if new_round else 0)
-        self.start_game(self.state.game_mode, self.state.player_side, number, self.player_names)
+        number = state.round_number + (1 if new_round else 0)
+        self.start_game(state.game_mode, state.player_side, number, self.player_names)
 
     @staticmethod
     def _clean_nickname(value, default):
@@ -746,12 +744,13 @@ class App:
         elif self.scene == STYLE_SELECT:
             r.draw_style_select(self.selected_game_style, self.menu_index)
         elif self.scene == SIDE_SELECT:
-            r.draw_side_select(
-                self.menu_index,
-                self.pending_mode,
-                self.nickname_inputs,
-                self.nickname_focus,
-            )
+            if self.pending_mode is not None:
+                r.draw_side_select(
+                    self.menu_index,
+                    self.pending_mode,
+                    self.nickname_inputs,
+                    self.nickname_focus,
+                )
         elif self.scene == SETTINGS:
             r.draw_settings(self.settings_options(), self.menu_index)
         elif state is not None:
