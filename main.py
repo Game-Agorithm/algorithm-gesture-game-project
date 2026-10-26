@@ -222,6 +222,9 @@ class App:
         self.prev_scene = TITLE
         self.menu_index = 0
         self.pending_mode = None
+        self.nickname_inputs = {"nickname": "", "T": "", "C": ""}
+        self.nickname_focus = None
+        self.player_names = {"T": "Player 1", "C": "Player 2"}
 
         self.state = None
         self.bot = None
@@ -250,7 +253,17 @@ class App:
     # Game control
     # ==================================================================
 
-    def start_game(self, mode, side=config.COW, round_number=1):
+    def start_game(self, mode, side=config.COW, round_number=1, player_names=None):
+        pygame.key.stop_text_input()
+        if player_names is None:
+            player_names = {"T": "Player 1", "C": "Player 2"}
+            if mode == config.MODE_SINGLE:
+                human_piece = "T" if side == config.TIGER else "C"
+                bot_piece = "C" if human_piece == "T" else "T"
+                player_names[human_piece] = "Player 1"
+                player_names[bot_piece] = "Computer"
+        self.player_names = dict(player_names)
+        self.nickname_focus = None
         self.state = GameState(mode, side, round_number, self.selected_game_style)
         self.renderer.set_style(self.state.game_style)
         self.bot = None
@@ -269,7 +282,17 @@ class App:
         if self.state is None:
             return
         number = self.state.round_number + (1 if new_round else 0)
-        self.start_game(self.state.game_mode, self.state.player_side, number)
+        self.start_game(self.state.game_mode, self.state.player_side, number, self.player_names)
+
+    @staticmethod
+    def _clean_nickname(value, default):
+        return value.strip() or default
+
+    def _prepare_player_setup(self, mode):
+        self.pending_mode = mode
+        self.nickname_focus = "nickname" if mode == config.MODE_SINGLE else "T"
+        pygame.key.start_text_input()
+        self.go(SIDE_SELECT)
 
     def _prompt(self):
         state = self.state
@@ -371,9 +394,14 @@ class App:
     def menu_ids(self):
         if self.scene == SETTINGS:
             return [bid for bid, _ in self.settings_options()]
+        if self.scene == SIDE_SELECT and self.pending_mode == config.MODE_TWO:
+            return ["start", "back"]
         return MENU_IDS.get(self.scene, [])
 
     def go(self, scene):
+        if self.scene == SIDE_SELECT and scene != SIDE_SELECT:
+            pygame.key.stop_text_input()
+            self.nickname_focus = None
         self.prev_scene, self.scene, self.menu_index = self.scene, scene, 0
 
     def start_vision(self):
@@ -400,9 +428,9 @@ class App:
             self.renderer.set_style(bid)
         elif bid == "continue":
             if self.pending_mode == config.MODE_SINGLE:
-                self.go(SIDE_SELECT)
+                self._prepare_player_setup(config.MODE_SINGLE)
             elif self.pending_mode == config.MODE_TWO:
-                self.start_game(config.MODE_TWO)
+                self._prepare_player_setup(config.MODE_TWO)
             else:
                 self.go(MODE_SELECT)
         elif bid == "single":
@@ -411,15 +439,32 @@ class App:
                 self.go(STYLE_SELECT)
             else:
                 self.pending_mode = config.MODE_SINGLE
-                self.go(SIDE_SELECT)
+                self._prepare_player_setup(config.MODE_SINGLE)
         elif bid == "two":
             if self.scene == TITLE:
                 self.pending_mode = config.MODE_TWO
                 self.go(STYLE_SELECT)
             else:
-                self.start_game(config.MODE_TWO)
+                self._prepare_player_setup(config.MODE_TWO)
+        elif bid.startswith("nickname"):
+            self.nickname_focus = {"nickname": "nickname",
+                                   "nickname_T": "T", "nickname_C": "C"}.get(bid)
+        elif bid == "start" and self.pending_mode == config.MODE_TWO:
+            names = {
+                "T": self._clean_nickname(self.nickname_inputs["T"], "Player 1"),
+                "C": self._clean_nickname(self.nickname_inputs["C"], "Player 2"),
+            }
+            self.start_game(config.MODE_TWO, player_names=names)
         elif bid in ("tiger", "cow"):
-            self.start_game(config.MODE_SINGLE, config.TIGER if bid == "tiger" else config.COW)
+            side = config.TIGER if bid == "tiger" else config.COW
+            human_piece = "T" if side == config.TIGER else "C"
+            bot_piece = "C" if human_piece == "T" else "T"
+            name = self._clean_nickname(self.nickname_inputs["nickname"], "Player 1")
+            self.start_game(
+                config.MODE_SINGLE,
+                side,
+                player_names={human_piece: name, bot_piece: "Computer"},
+            )
         elif bid == "settings":
             self.go(SETTINGS)
         elif bid == "back":
@@ -465,6 +510,9 @@ class App:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
                 self.handle_key(event.key)
+            elif event.type == pygame.TEXTINPUT and self.scene == SIDE_SELECT and self.nickname_focus:
+                field = self.nickname_focus
+                self.nickname_inputs[field] += event.text
             elif event.type == pygame.MOUSEMOTION:
                 bid = self.renderer.button_at(event.pos)
                 ids = self.menu_ids()
@@ -513,6 +561,22 @@ class App:
 
     def handle_key(self, key):
         scene = self.scene
+        if scene == SIDE_SELECT and self.nickname_focus is not None:
+            if key == pygame.K_ESCAPE:
+                self.go(MODE_SELECT if self.prev_scene == MODE_SELECT else STYLE_SELECT)
+            elif key == pygame.K_BACKSPACE:
+                field = self.nickname_focus
+                self.nickname_inputs[field] = self.nickname_inputs[field][:-1]
+            elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.pending_mode == config.MODE_TWO and self.nickname_focus == "T":
+                    self.nickname_focus = "C"
+                else:
+                    self.nickname_focus = None
+            elif key == pygame.K_F11:
+                self.renderer.toggle_fullscreen()
+            elif key == pygame.K_F3:
+                self.debug = not self.debug
+            return
         if key == pygame.K_F11:
             self.renderer.toggle_fullscreen()
         elif key == pygame.K_F3:
@@ -658,7 +722,12 @@ class App:
         elif self.scene == STYLE_SELECT:
             r.draw_style_select(self.selected_game_style, self.menu_index)
         elif self.scene == SIDE_SELECT:
-            r.draw_side_select(self.menu_index)
+            r.draw_side_select(
+                self.menu_index,
+                self.pending_mode,
+                self.nickname_inputs,
+                self.nickname_focus,
+            )
         elif self.scene == SETTINGS:
             r.draw_settings(self.settings_options(), self.menu_index)
         elif self.state is not None:
@@ -671,6 +740,7 @@ class App:
                 self.state, self.message, self.gesture, self.pointer, self.hover_pos,
                 self._preview_surface, status,
                 self._debug_lines() if self.debug else None, self.camera_enabled,
+                self.player_names,
             )
             if self.scene == PAUSED:
                 r.draw_pause(self.menu_index)

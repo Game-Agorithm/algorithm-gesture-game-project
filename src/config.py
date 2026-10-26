@@ -175,69 +175,87 @@ COW_SOUND = SOUND_FILES["cow_move"]
 
 FONT_FILE = FONT_DIR / "Poppins-Regular.ttf"
 SYSTEM_FONTS = "poppins,segoeui,arial,helveticaneue,dejavusans,liberationsans,freesans"
-TITLE_FONT_SIZE = 48
-BIG_FONT_SIZE = 40
-MEDIUM_FONT_SIZE = 28
-SMALL_FONT_SIZE = 20
+TITLE_FONT_SIZE = 40
+BIG_FONT_SIZE = 30
+MEDIUM_FONT_SIZE = 16
+SMALL_FONT_SIZE = 14
 
 
 # ============================================================
 # COLORS  (modern neon palette - define every colour here)
 # ============================================================
 
-NEON_BG = (5, 8, 22)             # #050816
-NEON_PANEL = (11, 16, 38)        # #0B1026
-NEON_CYAN = (0, 245, 255)        # #00F5FF
-POINTER_BLUE = (35, 115, 255)
-NEON_PURPLE = (139, 92, 246)     # #8B5CF6
-NEON_GREEN = (34, 255, 136)      # #22FF88
+NEON_BG = (8, 13, 24)            # #080D18
+NEON_PANEL = (23, 35, 55)        # #172337
+NEON_CYAN = (0, 229, 255)        # #00E5FF
+POINTER_BLUE = (124, 156, 255)   # #7C9CFF
+NEON_PURPLE = (130, 149, 176)    # #8295B0
+NEON_GREEN = (85, 239, 196)      # #55EFC4
 TIGER_ORANGE = (255, 122, 24)    # #FF7A18
-COW_WHITE = (244, 247, 255)      # #F4F7FF
-DANGER_RED = (255, 49, 88)       # #FF3158
-GOLD = (255, 200, 87)
-TEXT_MUTED = (140, 150, 190)
+COW_WHITE = (248, 250, 252)      # #F8FAFC
+DANGER_RED = (255, 107, 107)     # #FF6B6B
+GOLD = (255, 209, 102)           # #FFD166
+TEXT_MUTED = (192, 204, 221)     # #C0CCDD
 
 GAME_STYLES = {
     GAME_STYLE_MODERN: {
         "name": "Modern Tech",
-        "description": "Neon lights and a futuristic digital arena.",
+        "description": "A futuristic, clean, technology-inspired gaming experience.",
+        "heading_fonts": ("Rajdhani", "Segoe UI", "Arial"),
+        "body_fonts": ("Inter", "Segoe UI", "Arial"),
         "background_top": NEON_BG,
-        "background_bottom": (14, 8, 38),
+        "background_bottom": (16, 24, 39),  # #101827
         "panel": NEON_PANEL,
+        "elevated": (34, 51, 77),  # #22334D
         "frame": NEON_PURPLE,
         "grid": NEON_CYAN,
         "accent": NEON_CYAN,
-        "accent_secondary": NEON_PURPLE,
+        "accent_secondary": (124, 156, 255),  # #7C9CFF
         "highlight": NEON_GREEN,
+        "valid_move": (85, 239, 196),  # #55EFC4
+        "selected": GOLD,
+        "success": (112, 240, 168),  # #70F0A8
+        "disabled": (160, 174, 192),  # #A0AEC0
+        "button_text": (7, 17, 29),  # #07111D
         "text": COW_WHITE,
         "muted": TEXT_MUTED,
         "tiger": TIGER_ORANGE,
         "cow": NEON_CYAN,
         "danger": DANGER_RED,
         "gold": GOLD,
-        "ground": NEON_PANEL,
+        "ground": (17, 29, 48),  # #111D30
+        "board_background": (17, 29, 48),  # #111D30
         "tiger_image": TIGER_IMAGE,
         "cow_image": COW_IMAGE,
         "glow": True,
     },
     GAME_STYLE_JUNGLE: {
-        "name": "Natural Mountain Jungle",
-        "description": "A forest clearing beneath the mountain canopy.",
-        "background_top": (139, 202, 218),
-        "background_bottom": (219, 197, 143),
-        "panel": (29, 57, 39),
-        "frame": (105, 126, 72),
-        "grid": (213, 190, 139),
-        "accent": (102, 151, 83),
-        "accent_secondary": (67, 112, 70),
-        "highlight": (174, 202, 112),
-        "text": (249, 239, 207),
-        "muted": (196, 204, 163),
+        "name": "Jungle Mountain",
+        "description": "A natural jungle adventure inspired by mountains, forests, and wildlife.",
+        "heading_fonts": ("Cinzel", "Georgia", "Times New Roman", "Segoe UI"),
+        "body_fonts": ("Nunito Sans", "Segoe UI", "Arial"),
+        "background_top": (16, 27, 22),  # #101B16
+        "background_bottom": (23, 39, 30),  # #17271E
+        "panel": (32, 57, 43),  # #20392B
+        "elevated": (43, 73, 55),  # #2B4937
+        "frame": (183, 204, 183),  # #B7CCB7
+        "grid": (183, 204, 183),  # #B7CCB7
+        "accent": (244, 201, 93),  # #F4C95D
+        "accent_secondary": (142, 208, 129),  # #8ED081
+        "highlight": (142, 230, 160),  # #8EE6A0
+        "valid_move": (142, 230, 160),  # #8EE6A0
+        "selected": GOLD,
+        "success": (165, 230, 161),  # #A5E6A1
+        "disabled": (182, 197, 184),  # #B6C5B8
+        "button_text": (24, 37, 26),  # #18251A
+        "text": (255, 248, 232),  # #FFF8E8
+        "muted": (215, 228, 216),  # #D7E4D8
         "tiger": (224, 116, 43),
-        "cow": (235, 228, 199),
-        "danger": (176, 68, 49),
-        "gold": (236, 190, 102),
-        "ground": (107, 91, 57),
+        "cow": (255, 248, 232),
+        "danger": (255, 138, 128),  # #FF8A80
+        "gold": (244, 201, 93),  # #F4C95D
+        "ground": (24, 41, 31),  # #18291F
+        "board_background": (24, 41, 31),  # #18291F
         "tiger_image": TIGER_JUNGLE_IMAGE,
         "cow_image": COW_JUNGLE_IMAGE,
         "glow": False,
