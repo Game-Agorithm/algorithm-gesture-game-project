@@ -38,7 +38,6 @@ MENU_IDS = {
     STYLE_SELECT: ["modern", "jungle", "back", "continue"],
     MODE_SELECT: ["single", "two", "back"],
     SIDE_SELECT: ["tiger", "cow", "back"],
-    NICKNAME_ENTRY: ["continue", "back"],
     PAUSED: ["resume", "restart", "menu", "exit"],
     GAME_OVER: ["again", "menu", "exit"],
 }
@@ -274,25 +273,10 @@ class App:
     # ==================================================================
 
     def start_game(self, mode, side=config.COW, round_number=1, player_names=None):
-<<<<<<< HEAD
-        pygame.key.stop_text_input()
-        if player_names is None:
-            player_names = {"T": "Player 1", "C": "Player 2"}
-            if mode == config.MODE_SINGLE:
-                human_piece = "T" if side == config.TIGER else "C"
-                bot_piece = "C" if human_piece == "T" else "T"
-                player_names[human_piece] = "Player 1"
-                player_names[bot_piece] = "Computer"
-        self.player_names = dict(player_names)
-        self.nickname_focus = None
-        self.state = GameState(mode, side, round_number, self.selected_game_style)
-        self.renderer.set_style(self.state.game_style)
-=======
         state = GameState(mode, side, round_number)
         if player_names is not None:
             self.player_names = dict(player_names)
         self.state = state
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
         self.bot = None
         if mode == config.MODE_SINGLE:
             bot_piece = state.bot_piece
@@ -312,7 +296,6 @@ class App:
         state = self.state
         if state is None:
             return
-<<<<<<< HEAD
         number = self.state.round_number + (1 if new_round else 0)
         self.start_game(self.state.game_mode, self.state.player_side, number, self.player_names)
 
@@ -325,64 +308,6 @@ class App:
         self.nickname_focus = "nickname" if mode == config.MODE_SINGLE else "T"
         pygame.key.start_text_input()
         self.go(SIDE_SELECT)
-=======
-        number = state.round_number + (1 if new_round else 0)
-        self.start_game(state.game_mode, state.player_side, number, self.player_names)
-
-    def _begin_nickname_entry(self, mode, side=config.COW):
-        self.pending_mode = mode
-        self.pending_side = side
-        self.nickname_sides = (
-            ["T", "C"] if mode == config.MODE_TWO
-            else ["T" if side == config.TIGER else "C"]
-        )
-        self.nickname_values = {}
-        self.nickname_index = 0
-        self.nickname_input = ""
-        self.nickname_error = ""
-        self.nickname_return_scene = SIDE_SELECT if mode == config.MODE_SINGLE else self.scene
-        if mode == config.MODE_SINGLE:
-            self.nickname_return_parent = self.prev_scene
-        self.go(NICKNAME_ENTRY)
-        if pygame.display.get_init():
-            pygame.key.start_text_input()
-
-    def _cancel_nickname_entry(self):
-        if pygame.display.get_init():
-            pygame.key.stop_text_input()
-        if self.nickname_return_scene == SIDE_SELECT:
-            self.prev_scene = self.nickname_return_parent
-            self.scene, self.menu_index = SIDE_SELECT, 0
-        else:
-            self.go(self.nickname_return_scene)
-
-    def _submit_nickname(self):
-        nickname = self.nickname_input.strip()
-        if not nickname:
-            self.nickname_error = "Enter a nickname before continuing."
-            return
-
-        self.nickname_values[self.nickname_sides[self.nickname_index]] = nickname
-        self.nickname_error = ""
-        if self.nickname_index + 1 < len(self.nickname_sides):
-            self.nickname_index += 1
-            self.nickname_input = ""
-            return
-
-        if pygame.display.get_init():
-            pygame.key.stop_text_input()
-        self.start_game(
-            self.pending_mode,
-            self.pending_side,
-            player_names=self.nickname_values,
-        )
-
-    def _winner_name(self, state):
-        side = "T" if state.winner == "TIGERS" else "C"
-        if state.game_mode == config.MODE_SINGLE and side != state.player_piece:
-            return "Computer"
-        return self.player_names.get(side) or ("Tiger" if side == "T" else "Cow")
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
 
     def _prompt(self):
         state = self.state
@@ -552,7 +477,6 @@ class App:
             self.start_game(config.MODE_TWO, player_names=names)
         elif bid in ("tiger", "cow"):
             side = config.TIGER if bid == "tiger" else config.COW
-<<<<<<< HEAD
             human_piece = "T" if side == config.TIGER else "C"
             bot_piece = "C" if human_piece == "T" else "T"
             name = self._clean_nickname(self.nickname_inputs["nickname"], "Player 1")
@@ -561,19 +485,6 @@ class App:
                 side,
                 player_names={human_piece: name, bot_piece: "Computer"},
             )
-=======
-            self._begin_nickname_entry(config.MODE_SINGLE, side)
-        elif bid == "continue" and self.scene == NICKNAME_ENTRY:
-            self._submit_nickname()
-        elif bid == "back" and self.scene == NICKNAME_ENTRY:
-            if self.nickname_index:
-                self.nickname_index -= 1
-                side = self.nickname_sides[self.nickname_index]
-                self.nickname_input = self.nickname_values.get(side, "")
-                self.nickname_error = ""
-            else:
-                self._cancel_nickname_entry()
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
         elif bid == "settings":
             self.go(SETTINGS)
         elif bid == "back":
@@ -619,16 +530,9 @@ class App:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
                 self.handle_key(event.key)
-<<<<<<< HEAD
             elif event.type == pygame.TEXTINPUT and self.scene == SIDE_SELECT and self.nickname_focus:
                 field = self.nickname_focus
                 self.nickname_inputs[field] += event.text
-=======
-            elif event.type == pygame.TEXTINPUT and self.scene == NICKNAME_ENTRY:
-                text = "".join(char for char in event.text if char.isprintable())
-                self.nickname_input = (self.nickname_input + text)[:MAX_NICKNAME_LENGTH]
-                self.nickname_error = ""
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
             elif event.type == pygame.MOUSEMOTION:
                 bid = self.renderer.button_at(event.pos)
                 ids = self.menu_ids()
@@ -697,21 +601,8 @@ class App:
             self.renderer.toggle_fullscreen()
         elif key == pygame.K_F3:
             self.debug = not self.debug
-        elif key == pygame.K_s and self.scene != NICKNAME_ENTRY:
+        elif key == pygame.K_s:
             self.audio.toggle_muted()
-
-        elif self.scene == NICKNAME_ENTRY:
-            if key == pygame.K_BACKSPACE:
-                self.nickname_input = self.nickname_input[:-1]
-                self.nickname_error = ""
-            elif key == pygame.K_ESCAPE:
-                self._cancel_nickname_entry()
-            elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                self.activate(self.menu_ids()[self.menu_index])
-            elif key in (pygame.K_UP, pygame.K_LEFT):
-                self.menu_index = (self.menu_index - 1) % len(self.menu_ids())
-            elif key in (pygame.K_DOWN, pygame.K_RIGHT):
-                self.menu_index = (self.menu_index + 1) % len(self.menu_ids())
 
         elif scene == PLAYING:
             if key == pygame.K_ESCAPE:
@@ -855,23 +746,11 @@ class App:
         elif self.scene == STYLE_SELECT:
             r.draw_style_select(self.selected_game_style, self.menu_index)
         elif self.scene == SIDE_SELECT:
-<<<<<<< HEAD
             r.draw_side_select(
                 self.menu_index,
                 self.pending_mode,
                 self.nickname_inputs,
                 self.nickname_focus,
-=======
-            r.draw_side_select(self.menu_index)
-        elif self.scene == NICKNAME_ENTRY:
-            r.draw_nickname_entry(
-                self.nickname_values,
-                self.nickname_sides,
-                self.nickname_index,
-                self.nickname_input,
-                self.nickname_error,
-                self.menu_index,
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
             )
         elif self.scene == SETTINGS:
             r.draw_settings(self.settings_options(), self.menu_index)
@@ -885,16 +764,12 @@ class App:
                 state, self.message, self.gesture, self.pointer, self.hover_pos,
                 self._preview_surface, status,
                 self._debug_lines() if self.debug else None, self.camera_enabled,
-<<<<<<< HEAD
                 self.player_names,
-=======
-                winner_name=self._winner_name(state) if state.winner else None,
->>>>>>> 1759e8a52898b4b6c81a32ec4b4b16b43e9464c7
             )
             if self.scene == PAUSED:
                 r.draw_pause(self.menu_index)
             elif self.scene == GAME_OVER:
-                r.draw_game_over(state, self.menu_index, self._winner_name(state))
+                r.draw_game_over(state, self.menu_index)
         r.present()
         r.tick()
 
