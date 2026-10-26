@@ -768,7 +768,7 @@ class App:
             if self.scene == PAUSED:
                 r.draw_pause(self.menu_index)
             elif self.scene == GAME_OVER:
-                r.draw_game_over(state, self.menu_index)
+                r.draw_game_over(state, self.menu_index, self.player_names)
         r.present()
         r.tick()
 
