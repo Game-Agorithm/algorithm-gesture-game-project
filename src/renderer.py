@@ -1095,17 +1095,22 @@ class Renderer:
         for i, (bid, label, color, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 200, 235 + i * 85, 400, 62), label, i == selected, color, glyph)
 
-    def draw_game_over(self, state, selected=0):
+    def draw_game_over(self, state, selected=0, player_names=None):
         self.buttons = []
         self._dim(185)
         tigers = state.winner == "TIGERS"
         color = self.palette["tiger"] if tigers else self.palette["cow"]
+        winner_piece = "T" if tigers else "C"
+        winner_name = (player_names or {}).get(winner_piece)
+        winner_title = f"{winner_name} WINS!" if winner_name else (
+            "TIGER WINS!" if tigers else "COWS WIN!"
+        )
         if self._rng.random() < 0.25:
             self.burst((self._rng.randint(200, self.width - 200), self._rng.randint(120, 300)),
                        self._rng.choice([color, self.palette["gold"], self.palette["highlight"], self.palette["accent_secondary"]]), 14, 220)
         self._panel((self.width // 2 - 380, 110, 760, 500), color, 245)
         self._draw_piece("T" if tigers else "C", (self.width // 2, 215), 1.7)
-        self._text("TIGER WINS!" if tigers else "COWS WIN!", (self.width // 2, 330),
+        self._text(winner_title, (self.width // 2, 330),
                    color, self._font(40, role="heading"), "center", glow=self.palette["glow"])
         self._text("THE HUNT IS COMPLETE" if tigers else "THE TIGER IS BLOCKED", (self.width // 2, 385),
                    self.palette["muted"], self._font(16, False), "center")
