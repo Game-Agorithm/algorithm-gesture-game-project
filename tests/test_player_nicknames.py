@@ -64,6 +64,7 @@ def test_single_player_names_follow_the_selected_animal_and_bot():
         )
 
     assert app.player_names == {"T": "Sakreach", "C": "Computer"}
+    assert app.bot is not None
     assert app.bot.side == "C"
 
 
@@ -78,5 +79,6 @@ def test_restart_preserves_two_player_nicknames():
         app.restart(new_round=True)
 
     assert app.player_names == {"T": "Sakreach", "C": "Dara"}
+    assert app.state is not None
     assert app.state.round_number == 2
     assert app.bot is None

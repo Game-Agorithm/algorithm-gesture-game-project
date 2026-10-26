@@ -19,8 +19,9 @@ def make_app(scene):
 def test_solo_setup_collects_nickname_on_side_selection_screen():
     app = make_app(game_main.MODE_SELECT)
     started = []
-    app.start_game = lambda mode, side=config.COW, player_names=None: started.append(
-        (mode, side, player_names)
+    app.start_game = (
+        lambda mode, side=config.COW, round_number=1, player_names=None:
+        started.append((mode, side, round_number, player_names))
     )
 
     with patch("main.pygame.key.start_text_input"):
@@ -33,15 +34,16 @@ def test_solo_setup_collects_nickname_on_side_selection_screen():
     app.activate("tiger")
 
     assert started == [
-        (config.MODE_SINGLE, config.TIGER, {"T": "Tiger Ace", "C": "Computer"})
+        (config.MODE_SINGLE, config.TIGER, 1, {"T": "Tiger Ace", "C": "Computer"})
     ]
 
 
 def test_two_player_setup_uses_both_names_from_side_selection_screen():
     app = make_app(game_main.MODE_SELECT)
     started = []
-    app.start_game = lambda mode, side=config.COW, player_names=None: started.append(
-        (mode, side, player_names)
+    app.start_game = (
+        lambda mode, side=config.COW, round_number=1, player_names=None:
+        started.append((mode, side, round_number, player_names))
     )
 
     with patch("main.pygame.key.start_text_input"):
@@ -55,7 +57,7 @@ def test_two_player_setup_uses_both_names_from_side_selection_screen():
     app.activate("start")
 
     assert started == [
-        (config.MODE_TWO, config.COW, {"T": "Tiger Player", "C": "Cow Player"})
+        (config.MODE_TWO, config.COW, 1, {"T": "Tiger Player", "C": "Cow Player"})
     ]
 
 
@@ -63,14 +65,15 @@ def test_empty_nickname_uses_default_player_name():
     app = make_app(game_main.SIDE_SELECT)
     app.pending_mode = config.MODE_SINGLE
     started = []
-    app.start_game = lambda mode, side, player_names=None: started.append(
-        (mode, side, player_names)
+    app.start_game = (
+        lambda mode, side=config.COW, round_number=1, player_names=None:
+        started.append((mode, side, round_number, player_names))
     )
 
     app.activate("cow")
 
     assert started == [
-        (config.MODE_SINGLE, config.COW, {"C": "Player 1", "T": "Computer"})
+        (config.MODE_SINGLE, config.COW, 1, {"C": "Player 1", "T": "Computer"})
     ]
 
 

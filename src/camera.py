@@ -63,8 +63,11 @@ class Camera:
         Returns:
             frame: OpenCV image or None if capture fails.
         """
+        cap = self.cap
+        if cap is None:
+            return None
         try:
-            success, frame = self.cap.read()
+            success, frame = cap.read()
         except cv2.error:
             return None
 

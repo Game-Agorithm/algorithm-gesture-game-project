@@ -23,7 +23,9 @@ class KhlaSiKoRules:
     @classmethod
     def get_initial_board(cls) -> Board:
         """Returns a 4x4 grid. 'T' = Tiger, 'C' = Cow, None = Empty."""
-        board = [[None for _ in range(cls.BOARD_SIZE)] for _ in range(cls.BOARD_SIZE)]
+        board: Board = [
+            [None for _ in range(cls.BOARD_SIZE)] for _ in range(cls.BOARD_SIZE)
+        ]
         last = cls.BOARD_SIZE - 1
         corners = [(0, 0), (0, last), (last, 0), (last, last)]
         for row, col in corners[: cls.INITIAL_TIGERS]:
@@ -75,7 +77,7 @@ class KhlaSiKoRules:
         return [row[:] for row in board]
 
     @classmethod
-    def find_pieces(cls, board: Board, piece: str) -> List[Position]:
+    def find_pieces(cls, board: Board, piece: Optional[str]) -> List[Position]:
         return [
             (r, c)
             for r in range(cls.BOARD_SIZE)
