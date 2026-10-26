@@ -335,9 +335,9 @@ After the environment and dependencies are installed:
 python main.py
 
 The webcam starts automatically when the application opens. Point with only
-your index finger and hold the blue on-screen pointer over a button for three
-seconds to click it. In a game, the existing open-palm, thumbs-up, and fist
-gestures continue to select, confirm, and cancel board actions.
+your index finger to move the on-screen pointer and hover over a button, then
+show an open palm to click it. In a game, open palm, thumbs-up, and fist
+gestures also select, confirm, and cancel board actions.
 
 Game flow: title screen → game style selection → game mode → side selection
 (single player only) → game. Choose **Modern Tech** for the original neon

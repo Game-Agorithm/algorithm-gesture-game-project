@@ -104,7 +104,6 @@ THUMB_EXTENDED_RATIO = 1.2
 GESTURE_SMOOTHING_FRAMES = 5    # majority vote over the last N camera frames
 GESTURE_HOLD_SECONDS = 0.35     # SELECT / CONFIRM / CANCEL need a short hold
 GESTURE_COOLDOWN_SECONDS = 0.8  # then the same command waits before repeating
-GESTURE_BUTTON_HOLD_SECONDS = 3.0  # point at a UI button this long to click it
 
 # Part of the camera image that maps onto the board (so you never have to
 # reach the very edge of the camera view): (left, top, right, bottom).

@@ -248,10 +248,6 @@ class App:
         self.message = ""
         self.gesture = "NONE"
         self.pointer = None
-        self._button_hold_target = None
-        self._button_hold_started = None
-        self._button_hold_progress = 0.0
-        self._button_gesture_fired = False
         self.hover_pos = None
         self.last_hand_time = 0.0
         self.bot_timer = 0.0
@@ -545,37 +541,15 @@ class App:
                 elif self.scene == PLAYING:
                     self.handle_board_click(self.renderer.board_position_at(event.pos))
 
-    def _update_button_gesture(self, pointing, now):
-        if not pointing:
-            self._button_hold_target = None
-            self._button_hold_started = None
-            self._button_hold_progress = 0.0
-            self._button_gesture_fired = False
-            return
-
+    def _update_button_gesture(self, pointing, select_command):
         button_id = self.renderer.button_at(self.pointer) if self.pointer is not None else None
-        if button_id is None:
-            self._button_hold_target = None
-            self._button_hold_started = None
-            self._button_hold_progress = 0.0
-            return
-
-        if button_id in self.menu_ids():
+        if pointing and button_id in self.menu_ids():
             self.menu_index = self.menu_ids().index(button_id)
 
-        if self._button_gesture_fired:
-            return
-        if button_id != self._button_hold_target:
-            self._button_hold_target = button_id
-            self._button_hold_started = now
-            self._button_hold_progress = 0.0
-            return
-
-        held = now - self._button_hold_started
-        self._button_hold_progress = min(1.0, held / config.GESTURE_BUTTON_HOLD_SECONDS)
-        if held >= config.GESTURE_BUTTON_HOLD_SECONDS:
-            self._button_gesture_fired = True
+        if select_command and button_id is not None:
             self.activate(button_id)
+            return True
+        return False
 
     def handle_key(self, key):
         scene = self.scene
@@ -658,7 +632,7 @@ class App:
 
         if not (self.vision.online and self.camera_enabled):
             self.gesture, self.pointer = "NONE", None
-            self._update_button_gesture(False, now)
+            self._update_button_gesture(False, False)
             return
 
         result = self.recognizer.recognize(landmarks, now)
@@ -678,9 +652,12 @@ class App:
             if now - self.last_hand_time > config.HOVER_RELEASE_SECONDS and self.hover_pos is not None:
                 self.hover_pos = None
 
-        self._update_button_gesture(pointing, now)
+        button_clicked = self._update_button_gesture(
+            pointing, result.command == CMD_SELECT
+        )
 
-        if self.scene == PLAYING and self.state is not None and self.state.is_human_turn:
+        if (not button_clicked and self.scene == PLAYING and self.state is not None
+                and self.state.is_human_turn):
             if result.command in (CMD_SELECT, CMD_CONFIRM):
                 self.handle_board_click(self.hover_pos)
             elif result.command == CMD_CANCEL:
@@ -769,6 +746,7 @@ class App:
                 r.draw_pause(self.menu_index)
             elif self.scene == GAME_OVER:
                 r.draw_game_over(state, self.menu_index, self.player_names)
+        r.draw_pointer(self.pointer)
         r.present()
         r.tick()
 

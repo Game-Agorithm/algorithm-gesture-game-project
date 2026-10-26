@@ -655,12 +655,12 @@ class Renderer:
     def draw_pointer(self, point, hold_progress=0.0):
         if point is None:
             return
-        pygame.draw.circle(self.screen, self.palette["accent_secondary"], point, 10)
+        pygame.draw.circle(self.screen, config.POINTER_BLUE, point, 10)
         pygame.draw.circle(self.screen, self.palette["text"], point, 14, 2)
         if hold_progress > 0:
             pygame.draw.arc(
                 self.screen,
-                self.palette["accent_secondary"],
+                config.POINTER_BLUE,
                 pygame.Rect(point[0] - 20, point[1] - 20, 40, 40),
                 -math.pi / 2,
                 -math.pi / 2 + math.tau * min(1.0, hold_progress),
@@ -1020,7 +1020,7 @@ class Renderer:
         }
         self._text(label, (x, 512), gesture_colors.get(gesture, self.palette["text"]),
                    self._font(20), "midleft", glow=self.palette["glow"])
-        for i, line in enumerate(("POINT  hold 3s to click", "OPEN PALM  select", "THUMBS UP  confirm", "FIST  cancel")):
+        for i, line in enumerate(("POINT  move cursor", "OPEN PALM  click / select", "THUMBS UP  confirm", "FIST  cancel")):
             self._text(line, (x, 546 + i * 17), self.palette["muted"], self._font(14, False), "midleft")
 
         # --- debug
@@ -1066,11 +1066,19 @@ class Renderer:
         self._draw_board(state, pointer, hover_pos, debug=bool(debug_info))
         self._draw_panel(state, message, gesture, camera_surface, camera_status, debug_info)
 
-        # bottom buttons
-        self._button("reset", (75, 650, 160, 48), "RESET", False, self.palette["highlight"], "restart")
-        self._button("menu", (250, 650, 160, 48), "MENU", False, self.palette["accent_secondary"], "menu")
-        self._button("camera", (425, 650, 180, 48), f"CAMERA: {'ON' if camera_on else 'OFF'}", False,
-                     self.palette["accent"] if camera_on else self.palette["muted"])
+        self._draw_game_controls(pointer, camera_on)
+
+    def _draw_game_controls(self, pointer, camera_on):
+        controls = (
+            ("reset", pygame.Rect(75, 650, 160, 48), "RESET", self.palette["highlight"], "restart"),
+            ("menu", pygame.Rect(250, 650, 160, 48), "MENU", self.palette["accent_secondary"], "menu"),
+            ("camera", pygame.Rect(425, 650, 180, 48),
+             f"CAMERA: {'ON' if camera_on else 'OFF'}",
+             self.palette["accent"] if camera_on else self.palette["muted"], None),
+        )
+        for button_id, rect, label, color, glyph in controls:
+            selected = pointer is not None and rect.collidepoint(pointer)
+            self._button(button_id, rect, label, selected, color, glyph)
 
     # ==================================================================
     # Overlays (draw after draw_game, before present)

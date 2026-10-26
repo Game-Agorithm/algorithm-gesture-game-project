@@ -1,3 +1,5 @@
+from unittest.mock import Mock, patch
+
 import main as game_main
 from src import config
 from src.renderer import Renderer
@@ -25,54 +27,72 @@ def make_app():
     app.pointer = (10, 10)
     app.scene = game_main.TITLE
     app.menu_index = 0
-    app._button_hold_target = None
-    app._button_hold_started = None
-    app._button_hold_progress = 0.0
-    app._button_gesture_fired = False
     activated = []
     setattr(app, "_activated_buttons", activated)
     setattr(app, "activate", activated.append)
     return app
 
 
-def test_pointing_must_hold_on_a_button_for_three_seconds():
+def test_pointing_moves_hover_without_clicking():
+    app = make_app()
+    set_hovered_button(app, "single")
+
+    clicked = app._update_button_gesture(True, False)
+
+    assert clicked is False
+    assert app.menu_index == 1
+    assert activated_buttons(app) == []
+
+
+def test_open_palm_clicks_the_hovered_button_once():
     app = make_app()
     set_hovered_button(app, "play")
 
-    app._update_button_gesture(True, 1.0)
-    app._update_button_gesture(True, 1.0 + config.GESTURE_BUTTON_HOLD_SECONDS - 0.01)
-    assert activated_buttons(app) == []
+    clicked = app._update_button_gesture(False, True)
 
-    app._update_button_gesture(True, 1.0 + config.GESTURE_BUTTON_HOLD_SECONDS)
-    app._update_button_gesture(True, 5.0)
+    assert clicked is True
     assert activated_buttons(app) == ["play"]
 
 
-def test_leaving_a_button_restarts_the_hold_timer():
+def test_open_palm_clicks_buttons_across_screens():
     app = make_app()
-    set_hovered_button(app, "play")
-    app._update_button_gesture(True, 0.0)
+    buttons = ("start", "resume", "again", "reset", "camera")
 
-    set_hovered_button(app, "settings")
-    app._update_button_gesture(True, 2.0)
-    app._update_button_gesture(True, 4.99)
+    for button in buttons:
+        set_hovered_button(app, button)
+        assert app._update_button_gesture(False, True) is True
+
+    assert activated_buttons(app) == list(buttons)
+
+
+def test_gameplay_controls_are_clickable_with_open_palm():
+    app = game_main.App.__new__(game_main.App)
+    renderer = ButtonRenderer()
+    setattr(app, "renderer", renderer)
+    app.pointer = (10, 10)
+    app.scene = game_main.PLAYING
+    app.audio = Mock()
+    app.restart = Mock()
+    app.go = Mock()
+    app.toggle_camera = Mock()
+
+    for button in ("reset", "menu", "camera"):
+        renderer.hovered_button = button
+        assert app._update_button_gesture(False, True) is True
+
+    app.restart.assert_called_once_with()
+    app.go.assert_called_once_with(game_main.TITLE)
+    app.toggle_camera.assert_called_once_with()
+
+
+def test_open_palm_outside_a_button_does_not_click_or_consume_board_input():
+    app = make_app()
+    set_hovered_button(app, None)
+
+    clicked = app._update_button_gesture(False, True)
+
+    assert clicked is False
     assert activated_buttons(app) == []
-
-    app._update_button_gesture(True, 5.0)
-    assert activated_buttons(app) == ["settings"]
-
-
-def test_releasing_pointing_allows_another_button_click():
-    app = make_app()
-    set_hovered_button(app, "play")
-    app._update_button_gesture(True, 0.0)
-    app._update_button_gesture(True, config.GESTURE_BUTTON_HOLD_SECONDS)
-    app._update_button_gesture(False, 3.1)
-    set_hovered_button(app, "exit")
-    app._update_button_gesture(True, 4.0)
-    app._update_button_gesture(True, 4.0 + config.GESTURE_BUTTON_HOLD_SECONDS)
-
-    assert activated_buttons(app) == ["play", "exit"]
 
 
 def test_camera_pointer_maps_active_area_across_the_full_window():
@@ -92,6 +112,34 @@ def test_board_pointer_hits_screen_positions_of_rendered_nodes():
     assert renderer.board_position_at(renderer.board_node(0, 0)) == (0, 0)
     assert renderer.board_position_at(renderer.board_node(3, 3)) == (3, 3)
     assert renderer.board_position_at((1279, 719)) is None
+
+
+def test_camera_pointer_is_drawn_blue():
+    renderer = Renderer.__new__(Renderer)
+    renderer.screen = object()
+    renderer.palette = {"text": (255, 255, 255)}
+
+    with patch("src.renderer.pygame.draw.circle") as draw_circle:
+        renderer.draw_pointer((100, 120))
+
+    assert draw_circle.call_args_list[0].args[1] == config.POINTER_BLUE
+
+
+def test_gameplay_controls_highlight_under_camera_pointer():
+    renderer = Renderer.__new__(Renderer)
+    renderer.palette = {
+        "highlight": (1, 1, 1),
+        "accent_secondary": (2, 2, 2),
+        "accent": (3, 3, 3),
+        "muted": (4, 4, 4),
+    }
+    renderer._button = lambda *args: calls.append(args)
+    calls = []
+
+    renderer._draw_game_controls((500, 670), camera_on=True)
+
+    assert [call[0] for call in calls] == ["reset", "menu", "camera"]
+    assert [call[3] for call in calls] == [False, False, True]
 
 
 def test_game_style_flow_continues_to_mode_and_supports_back_navigation():
