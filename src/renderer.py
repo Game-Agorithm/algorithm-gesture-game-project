@@ -733,6 +733,43 @@ class Renderer:
                    self.palette["cow"], selected == 1, piece="C")
         self._button("back", (self.width // 2 - 110, 600, 220, 54), "BACK", selected == 2, self.palette["gold"])
 
+    def draw_nickname_entry(self, names, sides, active_index, current_input, error="", selected=0):
+        self._begin_frame()
+        color = config.NEON_CYAN
+        self._panel((210, 125, 860, 490), color, 245)
+        self._text("CHOOSE YOUR NICKNAME" if len(sides) == 1 else "CHOOSE PLAYER NICKNAMES",
+                   (self.width // 2, 175), color, self._font(42), "center", glow=True)
+        self._text("Type a nickname, then press ENTER.",
+                   (self.width // 2, 218), config.TEXT_MUTED, self.small_font, "center")
+
+        row_top = 285 if len(sides) > 1 else 345
+        for index, side in enumerate(sides):
+            active = index == active_index
+            y = row_top + index * 105
+            side_name = "TIGER" if side == "T" else "COW"
+            label = "YOUR NICKNAME" if len(sides) == 1 else f"PLAYER {index + 1}  •  {side_name}"
+            self._text(label, (self.width // 2, y), color if active else config.TEXT_MUTED,
+                       self._font(20), "center")
+            field = pygame.Rect(self.width // 2 - 280, y + 16, 560, 58)
+            pygame.draw.rect(self.screen, config.NEON_BG, field, border_radius=12)
+            pygame.draw.rect(self.screen, color if active else _scale(color, 0.5),
+                             field, 3 if active else 2, border_radius=12)
+            value = current_input if active else names.get(side, "")
+            self._text(value or "Type your nickname...", field.center,
+                       config.COW_WHITE if value else config.TEXT_MUTED,
+                       self._font(26, bold=bool(value)), "center")
+
+        if error:
+            self._text(error, (self.width // 2, 485), config.DANGER_RED, self.small_font, "center")
+        else:
+            hint = ("Player 2 enters their nickname next." if len(sides) > 1 and active_index == 0
+                    else "Names can be up to 16 characters.")
+            self._text(hint, (self.width // 2, 485), config.TEXT_MUTED, self.small_font, "center")
+
+        continue_label = "START GAME" if active_index == len(sides) - 1 else "NEXT PLAYER"
+        self._button("continue", (330, 525, 265, 58), continue_label, selected == 0, config.NEON_GREEN, "play")
+        self._button("back", (685, 525, 265, 58), "BACK", selected == 1, config.GOLD, "menu")
+
     def draw_settings(self, options, selected=0):
         """options: list of (button_id, label)."""
         self._begin_frame()
@@ -824,7 +861,8 @@ class Renderer:
             else:
                 self._ring(self.board_node(*pos), self.NODE_RADIUS + 6 + 10 * k, self.palette["danger"], 4)
 
-    def _draw_panel(self, state, message, gesture, camera_surface=None, camera_status=None, debug_info=None):
+    def _draw_panel(self, state, message, gesture, camera_surface=None, camera_status=None,
+                    debug_info=None, winner_name=None):
         left, width = 650, 590
         status = camera_status or {"online": False, "reason": ""}
 
@@ -832,7 +870,7 @@ class Renderer:
         turn_color = self.palette["tiger"] if state.current_turn == "T" else self.palette["cow"]
         self._panel((left, 100, width, 104), turn_color)
         if state.winner:
-            title, sub = "GAME OVER", ("TIGERS WIN" if state.winner == "TIGERS" else "COWS WIN")
+            title, sub = "GAME OVER", f"{winner_name or 'Player'} WINS!"
         else:
             title = state.turn_label
             if state.game_mode == config.MODE_SINGLE:
@@ -904,7 +942,8 @@ class Renderer:
                 self._text(line, (left + 14, 648 + i * 22), self.palette["text"], self._font(15, False), "midleft")
 
     def draw_game(self, state, message="", gesture="NONE", pointer=None, hover_pos=None,
-                  camera_surface=None, camera_status=None, debug_info=None, camera_on=True):
+                  camera_surface=None, camera_status=None, debug_info=None, camera_on=True,
+                  winner_name=None):
         self._begin_frame()
         # header
         pygame.draw.rect(self.screen, self.palette["panel"], (0, 22, self.width, 58))
@@ -918,7 +957,7 @@ class Renderer:
         self._text(mode, (self.width - 40, 66), self.palette["muted"], self._font(15, False), "midright")
 
         self._draw_board(state, pointer, hover_pos, debug=bool(debug_info))
-        self._draw_panel(state, message, gesture, camera_surface, camera_status, debug_info)
+        self._draw_panel(state, message, gesture, camera_surface, camera_status, debug_info, winner_name)
 
         # bottom buttons
         self._button("reset", (75, 650, 160, 48), "RESET", False, self.palette["highlight"], "restart")
@@ -948,7 +987,7 @@ class Renderer:
         for i, (bid, label, color, glyph) in enumerate(items):
             self._button(bid, (self.width // 2 - 200, 235 + i * 85, 400, 62), label, i == selected, color, glyph)
 
-    def draw_game_over(self, state, selected=0):
+    def draw_game_over(self, state, selected=0, winner_name=None):
         self.buttons = []
         self._dim(185)
         tigers = state.winner == "TIGERS"

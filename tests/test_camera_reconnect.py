@@ -10,6 +10,35 @@ def test_audio_downloader_accepts_youtube_urls_only():
     assert not is_youtube_url("not a URL")
 
 
+def test_camera_falls_back_when_directshow_backend_is_missing(monkeypatch):
+    from src import camera
+
+    opened_backends = []
+
+    class FakeCapture:
+        def isOpened(self):
+            return True
+
+        def set(self, *_args):
+            return True
+
+        def release(self):
+            pass
+
+    def open_camera(_index, backend):
+        opened_backends.append(backend)
+        return FakeCapture()
+
+    monkeypatch.setattr(camera.sys, "platform", "win32")
+    monkeypatch.delattr(camera.cv2, "CAP_DSHOW", raising=False)
+    monkeypatch.setattr(camera.cv2, "VideoCapture", open_camera)
+
+    opened_camera = camera.Camera()
+
+    assert opened_backends == [camera.cv2.CAP_ANY]
+    opened_camera.release()
+
+
 def test_camera_startup_explains_legacy_mediapipe_mismatch(monkeypatch):
     from src import camera, hand_tracker
 

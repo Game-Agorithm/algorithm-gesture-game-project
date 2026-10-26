@@ -20,9 +20,21 @@ class Camera:
         self.height = height
         self.flip = flip
 
-        # DirectShow opens faster and more reliably than the default backend on
-        # Windows; fall back to the default if it fails.
-        backends = [cv2.CAP_DSHOW, cv2.CAP_ANY] if sys.platform == "win32" else [cv2.CAP_ANY]
+        # DirectShow opens faster on Windows when the OpenCV build provides it.
+        backends = []
+        if sys.platform == "win32":
+            directshow = getattr(cv2, "CAP_DSHOW", None)
+            if directshow is not None:
+                backends.append(directshow)
+        default_backend = getattr(cv2, "CAP_ANY", None)
+        if default_backend is not None:
+            backends.append(default_backend)
+        if not backends:
+            raise RuntimeError(
+                "OpenCV does not provide a camera backend. "
+                "Reinstall the project requirements."
+            )
+
         self.cap = None
         for backend in backends:
             cap = cv2.VideoCapture(self.camera_index, backend)

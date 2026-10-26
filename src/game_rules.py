@@ -217,7 +217,6 @@ class KhlaSiKoRules:
     # ------------------------------------------------------------------
     # Winning
     # ------------------------------------------------------------------
-
     @classmethod
     def check_tiger_win(cls, board, unplaced_cows, captured_cows):
         """Tigers win by capturing enough cows (or when no cows are left)."""
@@ -243,8 +242,6 @@ class KhlaSiKoRules:
     @classmethod
     def check_game_over(cls, board, unplaced_cows, captured_cows):
         return cls.check_winner(board, unplaced_cows, captured_cows) is not None
-
-
 # ----------------------------------------------------------------------
 # Computer player
 # ----------------------------------------------------------------------
