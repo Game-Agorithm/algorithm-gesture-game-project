@@ -48,6 +48,14 @@ COW = "cow"
 MODE_SINGLE = "single_player"
 MODE_TWO = "two_player"
 
+# ============================================================
+# GAME STYLES
+# ============================================================
+
+GAME_STYLE_MODERN = "modern"
+GAME_STYLE_JUNGLE = "jungle"
+DEFAULT_GAME_STYLE = GAME_STYLE_MODERN
+
 GESTURE_NONE = "none"
 
 # Chance (0..1) that a bot plays a random legal action instead of its best one.
@@ -96,6 +104,7 @@ THUMB_EXTENDED_RATIO = 1.2
 GESTURE_SMOOTHING_FRAMES = 5    # majority vote over the last N camera frames
 GESTURE_HOLD_SECONDS = 0.35     # SELECT / CONFIRM / CANCEL need a short hold
 GESTURE_COOLDOWN_SECONDS = 0.8  # then the same command waits before repeating
+GESTURE_BUTTON_HOLD_SECONDS = 3.0  # point at a UI button this long to click it
 
 # Part of the camera image that maps onto the board (so you never have to
 # reach the very edge of the camera view): (left, top, right, bottom).
@@ -120,8 +129,10 @@ FONT_DIR = ASSETS_DIR / "fonts"
 # IMAGE FILES  (missing images fall back to drawn shapes)
 # ============================================================
 
-TIGER_IMAGE = ICON_DIR / "tiger.png"
-COW_IMAGE = ICON_DIR / "cow.png"
+TIGER_IMAGE = ICON_DIR / "tiger_tech.png"
+COW_IMAGE = ICON_DIR / "cow_tech.png"
+TIGER_JUNGLE_IMAGE = ICON_DIR / "tiger_jungle.png"
+COW_JUNGLE_IMAGE = ICON_DIR / "cow_jungle.png"
 
 BACKGROUND_IMAGE = IMAGE_DIR / "background.png"
 
@@ -177,6 +188,7 @@ SMALL_FONT_SIZE = 20
 NEON_BG = (5, 8, 22)             # #050816
 NEON_PANEL = (11, 16, 38)        # #0B1026
 NEON_CYAN = (0, 245, 255)        # #00F5FF
+POINTER_BLUE = (35, 115, 255)
 NEON_PURPLE = (139, 92, 246)     # #8B5CF6
 NEON_GREEN = (34, 255, 136)      # #22FF88
 TIGER_ORANGE = (255, 122, 24)    # #FF7A18
@@ -184,6 +196,53 @@ COW_WHITE = (244, 247, 255)      # #F4F7FF
 DANGER_RED = (255, 49, 88)       # #FF3158
 GOLD = (255, 200, 87)
 TEXT_MUTED = (140, 150, 190)
+
+GAME_STYLES = {
+    GAME_STYLE_MODERN: {
+        "name": "Modern Tech",
+        "description": "Neon lights and a futuristic digital arena.",
+        "background_top": NEON_BG,
+        "background_bottom": (14, 8, 38),
+        "panel": NEON_PANEL,
+        "frame": NEON_PURPLE,
+        "grid": NEON_CYAN,
+        "accent": NEON_CYAN,
+        "accent_secondary": NEON_PURPLE,
+        "highlight": NEON_GREEN,
+        "text": COW_WHITE,
+        "muted": TEXT_MUTED,
+        "tiger": TIGER_ORANGE,
+        "cow": NEON_CYAN,
+        "danger": DANGER_RED,
+        "gold": GOLD,
+        "ground": NEON_PANEL,
+        "tiger_image": TIGER_IMAGE,
+        "cow_image": COW_IMAGE,
+        "glow": True,
+    },
+    GAME_STYLE_JUNGLE: {
+        "name": "Natural Mountain Jungle",
+        "description": "A forest clearing beneath the mountain canopy.",
+        "background_top": (139, 202, 218),
+        "background_bottom": (219, 197, 143),
+        "panel": (29, 57, 39),
+        "frame": (105, 126, 72),
+        "grid": (213, 190, 139),
+        "accent": (102, 151, 83),
+        "accent_secondary": (67, 112, 70),
+        "highlight": (174, 202, 112),
+        "text": (249, 239, 207),
+        "muted": (196, 204, 163),
+        "tiger": (224, 116, 43),
+        "cow": (235, 228, 199),
+        "danger": (176, 68, 49),
+        "gold": (236, 190, 102),
+        "ground": (107, 91, 57),
+        "tiger_image": TIGER_JUNGLE_IMAGE,
+        "cow_image": COW_JUNGLE_IMAGE,
+        "glow": False,
+    },
+}
 
 # Old names kept so existing code keeps working.
 WHITE = COW_WHITE
