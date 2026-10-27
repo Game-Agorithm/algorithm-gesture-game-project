@@ -121,6 +121,30 @@ Prevent repeated detections from creating multiple selections.
 
 Keep gestures inside the player's defined region.
 
+Hand Pointer Input
+
+`src/hand_input.py` provides reusable hand-based UI input:
+
+- The index fingertip controls a pointer, mapped from camera coordinates to the game window.
+- Pinching the thumb and index finger produces one click when the pinch starts; holding the pinch does not repeat clicks.
+- A small release hysteresis reduces accidental repeat clicks from tracking jitter.
+
+Pass `HandTracker.get_landmarks(results)` to `HandInput.update(...)`. For a Pygame button, handle the click only when `pointer.clicked` is true and the pointer position is inside that button's rectangle. Apply the same check to each button so the input works consistently for menus, restart, next-round, and exit controls.
+
+```python
+pointer = hand_input.update(
+    tracker.get_landmarks(results),
+    (frame_width, frame_height),
+    (screen_width, screen_height),
+)
+if pointer and pointer.clicked:
+    for button in buttons:
+        if button.rect.collidepoint(pointer.position):
+            button.activate()
+```
+
+The current `main.py` is a hand-tracking preview and does not yet contain game buttons; this input module is ready to be connected to the game UI.
+
 User Interface
 
 The interface should display:
@@ -272,6 +296,7 @@ khla-si-ko/
 ├── src/
 │   ├── camera.py
 │   ├── hand_tracker.py
+│   ├── hand_input.py
 │   ├── gesture_recognizer.py
 │   ├── game_rules.py
 │   ├── game_state.py
@@ -618,4 +643,3 @@ Short demonstration video or live demonstration
 License
 
 This project is an educational computer-vision game project.
-
