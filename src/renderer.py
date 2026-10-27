@@ -17,6 +17,7 @@ import pygame
 
 from src import config
 from src.game_rules import KhlaSiKoRules
+from src.config import resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,10 @@ class Renderer:
 
     def _load_fonts(self):
         self._font_paths = {}
+        bundled_font = resource_path(
+            config.FONT_FILE.relative_to(config.PROJECT_ROOT)
+        )
+        fallback_font = str(bundled_font) if bundled_font.is_file() else None
         for style, palette in config.GAME_STYLES.items():
             for role in ("heading", "body"):
                 families = palette[f"{role}_fonts"]
@@ -132,9 +137,7 @@ class Renderer:
                             path = pygame.font.match_font(family)
                         if path is not None:
                             break
-                    self._font_paths[(style, role, bold)] = (
-                        path or (str(config.FONT_FILE) if config.FONT_FILE.exists() else None)
-                    )
+                    self._font_paths[(style, role, bold)] = path or fallback_font
         self._fonts = {}
 
     def _font(self, size, bold=True, role="body"):
@@ -183,11 +186,18 @@ class Renderer:
         for style, palette in config.GAME_STYLES.items():
             for piece, asset_key in (("T", "tiger_image"), ("C", "cow_image")):
                 path = palette[asset_key]
+                bundled_path = resource_path(path.relative_to(config.PROJECT_ROOT))
                 try:
-                    images[(style, piece)] = pygame.image.load(str(path)).convert_alpha()
+                    images[(style, piece)] = pygame.image.load(
+                        str(bundled_path)
+                    ).convert_alpha()
                 except (pygame.error, FileNotFoundError, OSError) as error:
-                    logger.info("Optional %s image %s unavailable (%s); using a drawn token.",
-                                style, path, error)
+                    logger.info(
+                        "Optional %s image %s unavailable (%s); using a drawn token.",
+                        style,
+                        bundled_path,
+                        error,
+                    )
                     images[(style, piece)] = None
         return images
 

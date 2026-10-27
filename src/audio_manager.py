@@ -14,6 +14,7 @@ import numpy as np
 import pygame
 
 from src import config
+from src.config import resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -125,13 +126,14 @@ class AudioManager:
     # ========================================================
 
     def _load(self, path):
+        bundled_path = resource_path(path.relative_to(config.PROJECT_ROOT))
 
         try:
 
-            if not path.exists():
+            if not bundled_path.exists():
                 return None
 
-            sound = pygame.mixer.Sound(str(path))
+            sound = pygame.mixer.Sound(str(bundled_path))
 
             sound.set_volume(self.volume)
 
@@ -139,7 +141,7 @@ class AudioManager:
 
         except (pygame.error, OSError) as error:
 
-            logger.warning("Could not load sound %s: %s", path, error)
+            logger.warning("Could not load sound %s: %s", bundled_path, error)
 
             return None
 
@@ -169,15 +171,16 @@ class AudioManager:
             return
 
         for path in config.MUSIC_FILES:
-            if path.exists():
+            bundled_path = resource_path(path.relative_to(config.PROJECT_ROOT))
+            if bundled_path.exists():
                 try:
-                    pygame.mixer.music.load(str(path))
+                    pygame.mixer.music.load(str(bundled_path))
                     pygame.mixer.music.set_volume(config.MUSIC_VOLUME)
                     if not self.muted:
                         pygame.mixer.music.play(-1)
                     return
                 except pygame.error as error:
-                    logger.warning("Could not play music %s: %s", path, error)
+                    logger.warning("Could not play music %s: %s", bundled_path, error)
 
     # ========================================================
     # PLAY
