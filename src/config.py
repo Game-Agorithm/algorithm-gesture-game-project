@@ -5,6 +5,7 @@ This file contains shared settings used by all modules.
 Do not put game logic here.
 """
 
+import sys
 from pathlib import Path
 
 
@@ -295,15 +296,12 @@ DEBUG = False                    # F3 toggles it in game
 SHOW_CAMERA = True               # small camera preview in the game screen
 SHOW_LANDMARKS = True            # draw the hand skeleton on the preview
 
-from pathlib import Path
-import sys
-
 
 def resource_path(relative_path):
     """Return the correct path for development and PyInstaller."""
     
     if getattr(sys, "frozen", False):
-        base_path = Path(sys._MEIPASS)
+        base_path = Path(getattr(sys, "_MEIPASS"))
     else:
         base_path = Path(__file__).resolve().parent.parent
 
